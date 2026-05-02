@@ -60,7 +60,7 @@ export default function DashboardLayout({ children }) {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push("/portal");
+    router.push("/");
   };
 
   // 🟢 RUTAS ACTUALIZADAS
