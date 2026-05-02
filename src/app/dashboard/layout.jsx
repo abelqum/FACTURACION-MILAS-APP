@@ -78,7 +78,7 @@ export default function DashboardLayout({ children }) {
     <html lang="es">
       <body className="bg-slate-50 flex min-h-screen">
         {!user ? (
-          <div className="w-full flex-1 flex items-center justify-center bg-slate-50 text-emerald-900 font-bold text-xl">
+          <div className="w-full flex-1 flex items-center justify-center bg-slate-50 text-blue-950 font-bold text-xl">
             Cargando interfaz...
           </div>
         ) : (
@@ -93,20 +93,20 @@ export default function DashboardLayout({ children }) {
 
             {/* 🟢 SIDEBAR RESPONSIVO Y OCULTABLE */}
             <aside
-              className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-emerald-900 text-white flex flex-col shadow-2xl transition-all duration-300 ease-in-out ${
+              className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-blue-950 text-white flex flex-col shadow-2xl transition-all duration-300 ease-in-out ${
                 isSidebarOpen
                   ? "translate-x-0 md:ml-0"
                   : "-translate-x-full md:-ml-72"
               }`}
             >
-              <div className="flex h-16 items-center justify-between px-6 border-b border-emerald-800 bg-emerald-950">
+              <div className="flex h-16 items-center justify-between px-6 border-b border-blue-800 bg-blue-950">
                 <h2 className="text-2xl font-black tracking-widest text-white">
                   WOOX
                 </h2>
                 {/* Botón de cerrar ("X") solo visible en celulares */}
                 <button
                   onClick={() => setIsSidebarOpen(false)}
-                  className="md:hidden text-emerald-300 hover:text-white bg-emerald-800/50 hover:bg-emerald-700 p-2 rounded-lg transition-colors"
+                  className="md:hidden text-blue-300 hover:text-white bg-blue-800/50 hover:bg-blue-700 p-2 rounded-lg transition-colors"
                 >
                   <svg
                     className="w-6 h-6"
@@ -137,8 +137,8 @@ export default function DashboardLayout({ children }) {
                       }
                       className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all whitespace-nowrap ${
                         isActive
-                          ? "bg-emerald-700 text-white shadow-md border border-emerald-600/50"
-                          : "text-emerald-100 hover:bg-emerald-800 hover:text-white"
+                          ? "bg-blue-700 text-white shadow-md border border-blue-600/50"
+                          : "text-blue-100 hover:bg-blue-800 hover:text-white"
                       }`}
                     >
                       <span className="text-xl">{link.icon}</span>
@@ -150,7 +150,7 @@ export default function DashboardLayout({ children }) {
                 <Link
                   href="/"
                   target="_blank"
-                  className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-emerald-200 hover:bg-emerald-800 transition-all border border-emerald-700/50"
+                  className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-blue-200 hover:bg-blue-800 transition-all border border-blue-700/50"
                 >
                   <span>🌐</span> Ver Sitio Público
                 </Link>
@@ -165,7 +165,7 @@ export default function DashboardLayout({ children }) {
                   {/* 🟢 BOTÓN HAMBURGUESA PARA ABRIR/CERRAR MENÚ */}
                   <button
                     onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className="text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 p-2 rounded-lg transition-colors focus:outline-none"
+                    className="text-slate-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded-lg transition-colors focus:outline-none"
                   >
                     <svg
                       className="w-6 h-6"
@@ -181,7 +181,7 @@ export default function DashboardLayout({ children }) {
                       />
                     </svg>
                   </button>
-                  <h1 className="text-base md:text-lg font-bold text-emerald-900 truncate">
+                  <h1 className="text-base md:text-lg font-bold text-blue-950 truncate">
                     {navLinks.find((l) => l.href === pathname)?.name || "Panel"}
                   </h1>
                 </div>

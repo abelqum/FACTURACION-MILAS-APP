@@ -89,7 +89,7 @@ export default function UsuariosCRUD() {
           title: "¡Usuario Registrado!",
           text: "La cuenta se ha creado correctamente.",
           icon: "success",
-          confirmButtonColor: "#059669", // Verde esmeralda (emerald-600)
+          confirmButtonColor: "#059669", // Verde esmeralda (blue-600)
           timer: 2500,
           showConfirmButton: false,
         });
@@ -142,7 +142,7 @@ export default function UsuariosCRUD() {
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
       {/* FORMULARIO */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
-        <h2 className="text-xl font-bold mb-6 text-emerald-900 border-b border-emerald-100 pb-3">
+        <h2 className="text-xl font-bold mb-6 text-blue-950 border-b border-blue-100 pb-3">
           👤 Registrar Nuevo Usuario
         </h2>
 
@@ -161,7 +161,7 @@ export default function UsuariosCRUD() {
               onChange={(e) =>
                 setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })
               }
-              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all"
+              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
               required
             />
           </div>
@@ -177,7 +177,7 @@ export default function UsuariosCRUD() {
               onChange={(e) =>
                 setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })
               }
-              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all"
+              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
               required
             />
           </div>
@@ -193,7 +193,7 @@ export default function UsuariosCRUD() {
               onChange={(e) =>
                 setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })
               }
-              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all"
+              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
               required
             />
           </div>
@@ -207,7 +207,7 @@ export default function UsuariosCRUD() {
               onChange={(e) =>
                 setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })
               }
-              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all bg-white"
+              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all bg-white"
             >
               <option value="admin">Administrador (Control Total)</option>
               <option value="editor">Editor (Solo lectura/edición)</option>
@@ -217,7 +217,7 @@ export default function UsuariosCRUD() {
           <button
             type="submit"
             disabled={cargando || miRol !== "admin"}
-            className="mt-2 bg-emerald-700 text-white font-bold py-3 rounded-lg hover:bg-emerald-800 transition-colors shadow-md shadow-emerald-700/20 disabled:bg-slate-400 disabled:cursor-not-allowed"
+            className="mt-2 bg-blue-700 text-white font-bold py-3 rounded-lg hover:bg-blue-800 transition-colors shadow-md shadow-blue-700/20 disabled:bg-slate-400 disabled:cursor-not-allowed"
           >
             {cargando ? "Registrando..." : "Crear Usuario"}
           </button>
@@ -257,7 +257,7 @@ export default function UsuariosCRUD() {
                     <span
                       className={`px-4 py-1.5 rounded-md text-xs font-bold tracking-wide ${
                         u.rol === "admin"
-                          ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          ? "bg-blue-100 text-blue-800 border border-blue-200"
                           : "bg-slate-100 text-slate-600 border border-slate-200"
                       }`}
                     >

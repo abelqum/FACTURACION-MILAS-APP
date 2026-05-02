@@ -32,13 +32,12 @@ export default function GestionProductos() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     const [resProd, resCat, resMar] = await Promise.all([
-      supabase.from("productos").select("*").order("id", { ascending: true }),
+      supabase
+        .from("facturas")
+        .select("*")
+        .order("no_factura", { ascending: true }),
       supabase.from("categorias").select("nombre").order("nombre"),
       supabase.from("marcas").select("nombre").order("nombre"),
     ]);
@@ -47,6 +46,9 @@ export default function GestionProductos() {
     if (resCat.data) setCategorias(resCat.data);
     if (resMar.data) setMarcas(resMar.data);
   };
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   // LÓGICA DE FILTRADO
   const filteredProducts = productos.filter((p) => {
@@ -225,13 +227,13 @@ export default function GestionProductos() {
                       ></span>
                       {p.min_2 && (
                         <span
-                          className="w-2 h-2 rounded-full bg-emerald-500"
+                          className="w-2 h-2 rounded-full bg-blue-500"
                           title={`Min 2: ${p.min_2} pzas`}
                         ></span>
                       )}
                       {p.min_3 && (
                         <span
-                          className="w-2 h-2 rounded-full bg-teal-400"
+                          className="w-2 h-2 rounded-full bg-blue-400"
                           title={`Min 3: ${p.min_3} pzas`}
                         ></span>
                       )}

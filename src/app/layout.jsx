@@ -1,8 +1,9 @@
 import "@/app/globals.css"; // <-- Vital para que cargue Tailwind
 
 export const metadata = {
-  title: "WOOX | Panel de administración WOOX",
-  description: "Panel de administración WOOX",
+  title:
+    "MILAS Equipos Industriales y Accesorios | Panel de administración MILAS",
+  description: "Panel de administración MILAS",
 };
 
 export default function PortalLayout({ children }) {

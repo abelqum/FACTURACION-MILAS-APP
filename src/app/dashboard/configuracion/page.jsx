@@ -686,7 +686,7 @@ export default function ConfiguracionPage() {
           <div
             className={`p-3 rounded-full shrink-0 transition-colors ${
               mostrarPrecios
-                ? "bg-emerald-100 text-[#004532]"
+                ? "bg-blue-100 text-[#004532]"
                 : "bg-slate-100 text-slate-400"
             }`}
           >
