@@ -126,93 +126,192 @@ export default function GestionClientes() {
   return (
     <div className="max-w-[90rem] mx-auto">
       {/* HEADER */}
-      <div className="flex justify-between mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Users /> Clientes
-        </h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-[#bec9c2]/30 pb-6">
+        <div>
+          <h1 className="text-2xl font-black text-[#131b2e] flex items-center gap-2">
+            <Users className="text-[#004532]" /> Directorio de Clientes
+          </h1>
+          <p className="text-sm text-[#3f4944] mt-1">
+            Gestiona la cartera de clientes, RFCs e información de contacto de
+            MILAS.
+          </p>
+        </div>
 
         <button
           onClick={() => openModal()}
-          className="bg-green-700 text-white px-4 py-2 rounded flex items-center gap-2"
+          className="bg-[#004532] text-white px-5 py-3 rounded-lg font-bold text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-[#131b2e] transition-all shadow-md active:scale-95"
         >
-          <Plus size={16} /> Agregar
+          <Plus size={16} /> Agregar Cliente
         </button>
       </div>
 
       {/* BUSCADOR */}
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Buscar..."
-          value={searchTerm}
-          onChange={handleSearchChange}
-          className="w-full p-2 border rounded"
-        />
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-[#bec9c2]/30 mb-6 flex items-center transition-shadow hover:shadow-md">
+        <div className="relative w-full md:w-1/2">
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+            size={18}
+          />
+          <input
+            type="text"
+            placeholder="Buscar por Razón Social o RFC..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="w-full pl-12 pr-4 py-3 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#004532] transition-all"
+          />
+        </div>
       </div>
 
       {/* TABLA */}
-      <table className="w-full text-sm border">
-        <thead>
-          <tr className="bg-gray-100">
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>RFC</th>
-            <th>Contacto</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {isLoading ? (
-            <tr>
-              <td colSpan="5" className="text-center p-6">
-                Cargando...
-              </td>
-            </tr>
-          ) : (
-            currentClientes.map((c) => (
-              <tr key={c.id}>
-                <td>{c.id}</td>
-                <td>{c.razon_social}</td>
-                <td>{c.rfc}</td>
-                <td>
-                  {c.telefonos?.join(" / ") || "—"}
-                  <br />
-                  {c.correos?.join(" / ") || ""}
-                </td>
-                <td className="flex gap-2">
-                  <button onClick={() => openModal(c)}>
-                    <Pencil size={16} />
-                  </button>
-                  <button onClick={() => handleDelete(c.id)}>
-                    <Trash2 size={16} />
-                  </button>
-                </td>
+      <div className="bg-white rounded-xl shadow-sm border border-[#bec9c2]/30 flex flex-col overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead className="bg-[#f2f3ff] text-[#3f4944] uppercase tracking-wider text-[10px] font-bold border-b border-[#bec9c2]/30">
+              <tr>
+                <th className="p-4 w-16 text-center">ID</th>
+                <th className="p-4">Razón Social</th>
+                <th className="p-4">RFC</th>
+                <th className="p-4">Contacto</th>
+                <th className="p-4 text-center">Acciones</th>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            </thead>
 
-      {/* PAGINACIÓN */}
-      <div className="flex justify-between mt-4">
-        <button
-          onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-          disabled={currentPage === 1}
-        >
-          <ChevronLeft />
-        </button>
+            <tbody className="divide-y divide-[#bec9c2]/20">
+              {isLoading ? (
+                <tr>
+                  <td colSpan="5" className="text-center p-12">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <div className="w-8 h-8 border-4 border-[#004532] border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-[#3f4944] font-bold text-sm">
+                        Cargando directorio...
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : currentClientes.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan="5"
+                    className="p-12 text-center text-slate-400 font-medium"
+                  >
+                    No se encontraron clientes en la búsqueda.
+                  </td>
+                </tr>
+              ) : (
+                currentClientes.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="hover:bg-slate-50 transition-colors group"
+                  >
+                    <td className="p-4 text-center font-bold text-slate-400 group-hover:text-[#004532] transition-colors">
+                      {c.id}
+                    </td>
+                    <td className="p-4">
+                      <p className="font-bold text-[#131b2e]">
+                        {c.razon_social}
+                      </p>
+                    </td>
+                    <td className="p-4">
+                      <span className="font-mono text-xs bg-[#e6f4ed] text-[#004532] px-2.5 py-1 rounded-md font-bold tracking-wider">
+                        {c.rfc}
+                      </span>
+                    </td>
+                    <td className="p-4 text-xs text-[#3f4944] space-y-1.5">
+                      {c.telefonos?.length > 0 && c.telefonos[0] !== "" ? (
+                        <div className="flex items-center gap-2">
+                          <Phone size={12} className="text-slate-400" />
+                          <span className="font-medium">
+                            {c.telefonos.join(" / ")}
+                          </span>
+                        </div>
+                      ) : null}
+                      {c.correos?.length > 0 && c.correos[0] !== "" ? (
+                        <div className="flex items-center gap-2">
+                          <Mail size={12} className="text-slate-400" />
+                          <span className="font-medium">
+                            {c.correos.join(" / ")}
+                          </span>
+                        </div>
+                      ) : null}
+                      {(!c.telefonos ||
+                        c.telefonos.length === 0 ||
+                        c.telefonos[0] === "") &&
+                        (!c.correos ||
+                          c.correos.length === 0 ||
+                          c.correos[0] === "") && (
+                          <span className="text-slate-300 italic">
+                            Sin datos de contacto
+                          </span>
+                        )}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => openModal(c)}
+                          className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-lg transition-colors shadow-sm"
+                          title="Editar"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(c.id)}
+                          className="p-2 text-red-600 bg-red-50 hover:bg-red-600 hover:text-white rounded-lg transition-colors shadow-sm"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        <span>
-          {currentPage} / {totalPages}
-        </span>
+        {/* PAGINACIÓN */}
+        {!isLoading && filteredClientes.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-[#bec9c2]/30 bg-[#f8faf9]">
+            <span className="text-xs text-[#3f4944] font-medium">
+              Mostrando{" "}
+              <span className="font-bold text-[#131b2e]">
+                {indexOfFirstItem + 1}
+              </span>{" "}
+              a{" "}
+              <span className="font-bold text-[#131b2e]">
+                {Math.min(indexOfLastItem, filteredClientes.length)}
+              </span>{" "}
+              de{" "}
+              <span className="font-bold text-[#131b2e]">
+                {filteredClientes.length}
+              </span>
+            </span>
 
-        <button
-          onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-          disabled={currentPage === totalPages}
-        >
-          <ChevronRight />
-        </button>
+            <div className="flex items-center gap-2 mt-4 sm:mt-0">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg border border-[#bec9c2]/30 text-[#131b2e] hover:bg-white hover:shadow-sm disabled:opacity-40 disabled:hover:bg-transparent disabled:shadow-none transition-all"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              <span className="text-xs font-bold px-3 text-[#131b2e] bg-white py-1.5 rounded-lg border border-[#bec9c2]/20 shadow-sm">
+                Página {currentPage} de {totalPages}
+              </span>
+
+              <button
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(p + 1, totalPages))
+                }
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg border border-[#bec9c2]/30 text-[#131b2e] hover:bg-white hover:shadow-sm disabled:opacity-40 disabled:hover:bg-transparent disabled:shadow-none transition-all"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODAL */}
