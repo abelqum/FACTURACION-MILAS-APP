@@ -188,7 +188,7 @@ export default function GestionFacturas() {
 
         <button
           onClick={() => openModal()}
-          className="bg-[#004532] text-white px-5 py-3 rounded-lg font-bold text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-[#131b2e] transition-all shadow-md active:scale-95"
+          className="bg-blue-700 text-white px-5 py-3 rounded-lg font-bold text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-blue-800 transition-all shadow-md shadow-blue-700/20 active:scale-95"
         >
           <Plus size={16} /> Agregar Factura
         </button>
@@ -206,14 +206,15 @@ export default function GestionFacturas() {
             placeholder="Buscar folio o nombre del cliente..."
             value={searchTerm}
             onChange={handleFilterChange(setSearchTerm)}
-            className="w-full pl-12 pr-4 py-3 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#004532] transition-all"
+            className="w-full pl-12 pr-4 py-3 bg-[#f8faf9] border  text-sm focus:outline-none   p-3 rounded-lg focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 transition-all text-slate-800 font-medium  border-[#bec9c2]/40 "
           />
         </div>
 
         <select
           value={filterCliente}
           onChange={handleFilterChange(setFilterCliente)}
-          className="w-full py-3 px-4 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#004532] text-[#3f4944] transition-all"
+          className="w-full py-3 px-4 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none
+          focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-[#3f4944] transition-all"
         >
           <option value="">Todos los Clientes</option>
           {clientes.map((c) => (
@@ -226,7 +227,8 @@ export default function GestionFacturas() {
         <select
           value={filterEstado}
           onChange={handleFilterChange(setFilterEstado)}
-          className="w-full py-3 px-4 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#004532] text-[#3f4944] transition-all"
+          className="w-full py-3 px-4 bg-[#f8faf9] border
+           border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-[#3f4944] transition-all"
         >
           <option value="">Cualquier Estado</option>
           <option value="PAGADO">PAGADAS</option>
@@ -238,7 +240,8 @@ export default function GestionFacturas() {
           <select
             value={filterMes}
             onChange={handleFilterChange(setFilterMes)}
-            className="w-1/2 py-3 px-2 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#004532] text-[#3f4944] transition-all"
+            className="w-1/2 py-3 px-2 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg 
+            text-sm focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-[#3f4944] transition-all"
           >
             <option value="">Mes</option>
             <option value="01">Enero</option>
@@ -257,7 +260,8 @@ export default function GestionFacturas() {
           <select
             value={filterAno}
             onChange={handleFilterChange(setFilterAno)}
-            className="w-1/2 py-3 px-2 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#004532] text-[#3f4944] transition-all"
+            className="w-1/2 py-3 px-2 bg-[#f8faf9] border border-[#bec9c2]/40
+             rounded-lg text-sm focus:outline-none focus:ring-2 focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-[#3f4944] transition-all"
           >
             <option value="">Año</option>
             <option value="2026">2026</option>

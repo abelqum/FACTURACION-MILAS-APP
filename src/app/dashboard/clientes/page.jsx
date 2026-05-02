@@ -139,7 +139,7 @@ export default function GestionClientes() {
 
         <button
           onClick={() => openModal()}
-          className="bg-[#004532] text-white px-5 py-3 rounded-lg font-bold text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-[#131b2e] transition-all shadow-md active:scale-95"
+          className="bg-blue-700 text-white px-5 py-3 rounded-lg font-bold text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-blue-800 transition-all shadow-md shadow-blue-700/20 active:scale-95"
         >
           <Plus size={16} /> Agregar Cliente
         </button>
@@ -157,7 +157,7 @@ export default function GestionClientes() {
             placeholder="Buscar por Razón Social o RFC..."
             value={searchTerm}
             onChange={handleSearchChange}
-            className="w-full pl-12 pr-4 py-3 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#004532] transition-all"
+            className="w-full pl-12 pr-4 py-3 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#004532] transition-all border-slate-200 p-3 rounded-lg focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 transition-all text-slate-800 font-medium bg-slate-50"
           />
         </div>
       </div>

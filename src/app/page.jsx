@@ -92,6 +92,7 @@ export default function AdminLogin() {
             </label>
             <div className="relative flex items-center">
               <input
+                className="w-full border-2 border-slate-200 p-3 rounded-lg focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 transition-all text-slate-800 font-medium bg-slate-50"
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 value={password}
