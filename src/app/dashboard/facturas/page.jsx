@@ -1,8 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Swal from "sweetalert2";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import FacturaFormModal from "@/app/_components/FacturaFormModal";
+import jsPDF from "jspdf";
+// 🟢 CORRECCIÓN: Importamos autoTable como una función independiente
+import autoTable from "jspdf-autotable";
 import {
   Plus,
   Pencil,
@@ -11,6 +14,12 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Wallet,
+  Receipt,
+  Landmark,
+  Clock,
+  AlertCircle,
+  FileDown,
 } from "lucide-react";
 
 export default function GestionFacturas() {
@@ -21,117 +30,162 @@ export default function GestionFacturas() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFactura, setSelectedFactura] = useState(null);
 
+  // FILTROS
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCliente, setFilterCliente] = useState("");
   const [filterEstado, setFilterEstado] = useState("");
   const [filterMes, setFilterMes] = useState("");
   const [filterAno, setFilterAno] = useState("");
+  const [filtroTipoFecha, setFiltroTipoFecha] = useState("emision");
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  // ✅ EFFECT LIMPIO (SIN WARNING)
   useEffect(() => {
     let isMounted = true;
-
     const loadData = async () => {
-      // Ordenamos por fecha descendente y luego por número de factura descendente
-      // Dentro de loadData y fetchData cambia el ordenamiento:
       const { data: resFacturas, error } = await supabase
         .from("facturas")
-        .select(
-          `
-    *,
-    clientes ( razon_social ),
-    estados_factura ( nombre )
-  `,
-        )
-        // Primero ordenamos por la fecha de emisión (más recientes arriba)
+        .select(`*, clientes ( razon_social ), estados_factura ( nombre )`)
         .order("fecha", { ascending: false })
-        // Luego, para el mismo día, ordenamos por folio de forma descendente
         .order("no_factura", { ascending: false });
-
       const { data: resClientes } = await supabase
         .from("clientes")
         .select("id, razon_social")
         .order("razon_social");
-
       if (!isMounted) return;
-
       if (error) {
-        console.error(error);
         Swal.fire("Error", "No se pudieron cargar las facturas", "error");
       } else {
         setFacturas(resFacturas || []);
         setClientes(resClientes || []);
       }
-
       setIsLoading(false);
     };
-
     loadData();
-
     return () => {
       isMounted = false;
     };
   }, []);
 
-  // 🔁 FETCH PARA ACCIONES (DELETE / SAVE)
   const fetchData = async () => {
     const { data: resFacturas } = await supabase
       .from("facturas")
-      .select(
-        `
-        *,
-        clientes ( razon_social ),
-        estados_factura ( nombre )
-      `,
-      )
+      .select(`*, clientes ( razon_social ), estados_factura ( nombre )`)
       .order("fecha", { ascending: false })
       .order("no_factura", { ascending: false });
-
     const { data: resClientes } = await supabase
       .from("clientes")
       .select("id, razon_social")
       .order("razon_social");
-
     setFacturas(resFacturas || []);
     setClientes(resClientes || []);
   };
 
-  // MANEJADORES DE FILTROS (SIN USEEFFECTS EXTRA)
   const handleFilterChange = (setter) => (e) => {
     setter(e.target.value);
     setCurrentPage(1);
   };
 
-  // 🔎 FILTROS INTELIGENTES SÍNCRONOS
-  const filteredFacturas = facturas.filter((f) => {
-    const term = searchTerm.toLowerCase();
-    const matchSearch =
-      f.clientes?.razon_social?.toLowerCase().includes(term) ||
-      f.no_factura?.toLowerCase().includes(term);
+  const filteredFacturas = useMemo(() => {
+    return facturas.filter((f) => {
+      const term = searchTerm.toLowerCase();
+      const matchSearch =
+        f.clientes?.razon_social?.toLowerCase().includes(term) ||
+        f.no_factura?.toString().includes(term);
+      const matchCliente = filterCliente
+        ? f.cliente_id.toString() === filterCliente
+        : true;
+      const matchEstado = filterEstado
+        ? f.estados_factura?.nombre === filterEstado
+        : true;
+      let matchMes = true;
+      let matchAno = true;
 
-    const matchCliente = filterCliente
-      ? f.cliente_id.toString() === filterCliente
-      : true;
-    const matchEstado = filterEstado
-      ? f.estados_factura?.nombre === filterEstado
-      : true;
+      if (filterMes || filterAno) {
+        const fechaAFiltrar =
+          filtroTipoFecha === "pago" ? f.fecha_pago : f.fecha;
+        if (!fechaAFiltrar) {
+          matchMes = false;
+          matchAno = false;
+        } else {
+          const facturaFechaObj = new Date(fechaAFiltrar + "T12:00:00Z");
+          const fMes = (facturaFechaObj.getUTCMonth() + 1)
+            .toString()
+            .padStart(2, "0");
+          const fAno = facturaFechaObj.getUTCFullYear().toString();
+          if (filterMes) matchMes = fMes === filterMes;
+          if (filterAno) matchAno = fAno === filterAno;
+        }
+      }
+      return matchSearch && matchCliente && matchEstado && matchMes && matchAno;
+    });
+  }, [
+    facturas,
+    searchTerm,
+    filterCliente,
+    filterEstado,
+    filterMes,
+    filterAno,
+    filtroTipoFecha,
+  ]);
 
-    const facturaFecha = new Date(f.fecha);
-    const facturaMes = (facturaFecha.getUTCMonth() + 1)
-      .toString()
-      .padStart(2, "0");
-    const facturaAno = facturaFecha.getUTCFullYear().toString();
+  const totales = useMemo(() => {
+    return filteredFacturas.reduce(
+      (acc, factura) => {
+        acc.subtotal += Number(factura.subtotal) || 0;
+        acc.iva += Number(factura.iva) || 0;
+        acc.total += Number(factura.total) || 0;
+        return acc;
+      },
+      { subtotal: 0, iva: 0, total: 0 },
+    );
+  }, [filteredFacturas]);
 
-    const matchMes = filterMes ? facturaMes === filterMes : true;
-    const matchAno = filterAno ? facturaAno === filterAno : true;
+  const totalesPendientes = useMemo(() => {
+    return facturas
+      .filter((f) => {
+        const term = searchTerm.toLowerCase();
+        const matchSearch =
+          f.clientes?.razon_social?.toLowerCase().includes(term) ||
+          f.no_factura?.toString().includes(term);
+        const matchCliente = filterCliente
+          ? f.cliente_id.toString() === filterCliente
+          : true;
+        const matchEstado = f.estados_factura?.nombre === "PENDIENTE";
+        let matchMes = true;
+        let matchAno = true;
 
-    return matchSearch && matchCliente && matchEstado && matchMes && matchAno;
-  });
+        if (filterMes || filterAno) {
+          const fechaAFiltrar = f.fecha;
+          if (!fechaAFiltrar) {
+            matchMes = false;
+            matchAno = false;
+          } else {
+            const facturaFechaObj = new Date(fechaAFiltrar + "T12:00:00Z");
+            const fMes = (facturaFechaObj.getUTCMonth() + 1)
+              .toString()
+              .padStart(2, "0");
+            const fAno = facturaFechaObj.getUTCFullYear().toString();
+            if (filterMes) matchMes = fMes === filterMes;
+            if (filterAno) matchAno = fAno === filterAno;
+          }
+        }
+        return (
+          matchSearch && matchCliente && matchEstado && matchMes && matchAno
+        );
+      })
+      .reduce(
+        (acc, factura) => {
+          acc.subtotal += Number(factura.subtotal) || 0;
+          acc.iva += Number(factura.iva) || 0;
+          acc.total += Number(factura.total) || 0;
+          return acc;
+        },
+        { subtotal: 0, iva: 0, total: 0 },
+      );
+  }, [facturas, searchTerm, filterCliente, filterMes, filterAno]);
 
-  // 📄 PAGINACIÓN
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentFacturas = filteredFacturas.slice(
@@ -150,17 +204,13 @@ export default function GestionFacturas() {
       !window.confirm("¿Seguro que deseas eliminar este registro de factura?")
     )
       return;
-
     try {
       const { error } = await supabase.from("facturas").delete().eq("id", id);
       if (error) throw error;
-
       await fetchData();
-
       if (currentFacturas.length === 1 && currentPage > 1) {
         setCurrentPage((prev) => prev - 1);
       }
-
       Swal.fire("Eliminada", "La factura ha sido borrada.", "success");
     } catch (err) {
       Swal.fire("Error", err.message, "error");
@@ -173,130 +223,380 @@ export default function GestionFacturas() {
       currency: "MXN",
     }).format(amount);
 
+  // 🟢 FUNCIÓN MÁGICA PARA GENERAR PDF
+  const handleExportarPDF = async () => {
+    if (filteredFacturas.length === 0) {
+      Swal.fire(
+        "Atención",
+        "No hay registros para exportar con los filtros actuales.",
+        "warning",
+      );
+      return;
+    }
+
+    const { value: comentario } = await Swal.fire({
+      title: "Exportar Reporte",
+      input: "textarea",
+      inputLabel:
+        "Puedes agregar una nota para el contador al final del documento (Opcional)",
+      inputPlaceholder: "Escribe aquí...",
+      showCancelButton: true,
+      confirmButtonText: "Generar PDF",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#1d4ed8",
+    });
+
+    if (comentario !== undefined) {
+      const doc = new jsPDF("p", "pt", "letter");
+
+      // Encabezado
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("MILAS EQUIPOS INDUSTRIALES Y ACCESORIOS", 40, 40);
+
+      // Título Dinámico
+      let subtitulo = "REPORTE DE FACTURAS";
+      if (filtroTipoFecha === "pago" && filterMes && filterAno) {
+        const mesesNombres = [
+          "ENERO",
+          "FEBRERO",
+          "MARZO",
+          "ABRIL",
+          "MAYO",
+          "JUNIO",
+          "JULIO",
+          "AGOSTO",
+          "SEPTIEMBRE",
+          "OCTUBRE",
+          "NOVIEMBRE",
+          "DICIEMBRE",
+        ];
+        const mesNombre = mesesNombres[parseInt(filterMes) - 1];
+        subtitulo = `FACTURAS PAGADAS EN ${mesNombre} ${filterAno}`;
+      } else if (filterMes || filterAno) {
+        subtitulo = `REPORTE DE FACTURAS FILTRADAS`;
+      }
+
+      doc.setFontSize(11);
+      doc.text(subtitulo, 40, 60);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        `Fecha de impresión: ${new Date().toLocaleDateString("es-MX")}`,
+        40,
+        75,
+      );
+
+      const tableData = filteredFacturas.map((f) => [
+        f.no_factura,
+        new Date(f.fecha + "T12:00:00Z").toLocaleDateString("es-MX"),
+        f.fecha_pago
+          ? new Date(f.fecha_pago + "T12:00:00Z").toLocaleDateString("es-MX")
+          : "---",
+        f.clientes?.razon_social || "Desconocido",
+        formatCurrency(f.total),
+        f.estados_factura?.nombre || "",
+      ]);
+
+      // 🟢 CORRECCIÓN: Usamos autoTable pasando el doc como primer parámetro
+      autoTable(doc, {
+        startY: 90,
+        head: [
+          ["Folio", "Emisión", "Fecha Pago", "Cliente", "Total", "Estado"],
+        ],
+        body: tableData,
+        theme: "striped",
+        headStyles: { fillColor: [29, 78, 216], fontSize: 9 }, // Azul corporativo
+        bodyStyles: { fontSize: 8 },
+        alternateRowStyles: { fillColor: [248, 250, 249] },
+      });
+
+      // Agregar Comentario
+      const finalY = doc.lastAutoTable.finalY || 90;
+
+      // Resumen Totales en el PDF
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(
+        `Total Sumado: ${formatCurrency(totales.total)}`,
+        40,
+        finalY + 30,
+      );
+
+      if (comentario) {
+        doc.setFontSize(10);
+        doc.text("Notas Adicionales:", 40, finalY + 60);
+        doc.setFont("helvetica", "normal");
+        const splitText = doc.splitTextToSize(comentario, 530);
+        doc.text(splitText, 40, finalY + 75);
+      }
+
+      // Descargar PDF
+      doc.save(`Reporte_MILAS_${new Date().getTime()}.pdf`);
+    }
+  };
+
   return (
-    <div className="max-w-[90rem] mx-auto">
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b border-[#bec9c2]/30 pb-6">
+    <div className="max-w-[90rem] mx-auto space-y-8">
+      {/* HEADER Y BOTONES DE ACCIÓN */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-6 gap-4">
         <div>
           <h1 className="text-2xl font-black text-[#131b2e] flex items-center gap-2">
-            <FileText className="text-[#004532]" /> Registro de Facturas
+            <FileText className="text-blue-700" /> Historial de Facturación
           </h1>
-          <p className="text-sm text-[#3f4944] mt-1">
+          <p className="text-sm text-slate-500 mt-1">
             Control de cobranza, emisiones y estatus de facturación MILAS.
           </p>
         </div>
 
-        <button
-          onClick={() => openModal()}
-          className="bg-blue-700 text-white px-5 py-3 rounded-lg font-bold text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-blue-800 transition-all shadow-md shadow-blue-700/20 active:scale-95"
-        >
-          <Plus size={16} /> Agregar Factura
-        </button>
+        <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
+          <button
+            onClick={handleExportarPDF}
+            className="w-full sm:w-auto bg-white text-blue-700 border border-blue-200 px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-50 transition-all shadow-sm active:scale-95"
+          >
+            <FileDown size={16} /> Exportar PDF
+          </button>
+
+          <button
+            onClick={() => openModal()}
+            className="w-full sm:w-auto bg-blue-700 text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-800 transition-all shadow-md shadow-blue-700/20 active:scale-95"
+          >
+            <Plus size={16} /> Nueva Factura
+          </button>
+        </div>
       </div>
 
-      {/* FILTROS */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-[#bec9c2]/30 mb-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-center transition-shadow hover:shadow-md">
+      {/* 📊 SECCIÓN DE KPIs DOBLE */}
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <Landmark size={16} /> Resumen de la Vista Actual (Según Filtros)
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-5 transition-shadow hover:shadow-md">
+              <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                <Wallet size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Total en Pantalla
+                </p>
+                <p className="text-xl font-black text-[#131b2e] mt-0.5">
+                  {formatCurrency(totales.total)}
+                </p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-5 transition-shadow hover:shadow-md">
+              <div className="p-3.5 bg-blue-50 text-blue-600 rounded-xl">
+                <Receipt size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Subtotal Pantalla
+                </p>
+                <p className="text-xl font-black text-[#131b2e] mt-0.5">
+                  {formatCurrency(totales.subtotal)}
+                </p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-5 transition-shadow hover:shadow-md">
+              <div className="p-3.5 bg-purple-50 text-purple-600 rounded-xl">
+                <Landmark size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  I.V.A. Pantalla
+                </p>
+                <p className="text-xl font-black text-[#131b2e] mt-0.5">
+                  {formatCurrency(totales.iva)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <AlertCircle size={16} /> Por Cobrar (Solo Facturas Pendientes)
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-orange-200 flex items-center gap-5 transition-shadow hover:shadow-md">
+              <div className="p-3.5 bg-orange-50 text-orange-600 rounded-xl">
+                <Clock size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-orange-600/80 uppercase tracking-widest">
+                  Deuda Total
+                </p>
+                <p className="text-xl font-black text-orange-700 mt-0.5">
+                  {formatCurrency(totalesPendientes.total)}
+                </p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-orange-200 flex items-center gap-5 transition-shadow hover:shadow-md">
+              <div className="p-3.5 bg-orange-50 text-orange-600 rounded-xl">
+                <Receipt size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-orange-600/80 uppercase tracking-widest">
+                  Subtotal Deuda
+                </p>
+                <p className="text-xl font-black text-orange-700 mt-0.5">
+                  {formatCurrency(totalesPendientes.subtotal)}
+                </p>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-orange-200 flex items-center gap-5 transition-shadow hover:shadow-md">
+              <div className="p-3.5 bg-orange-50 text-orange-600 rounded-xl">
+                <Landmark size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-orange-600/80 uppercase tracking-widest">
+                  I.V.A. Deuda
+                </p>
+                <p className="text-xl font-black text-orange-700 mt-0.5">
+                  {formatCurrency(totalesPendientes.iva)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* FILTROS AVANZADOS */}
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
         <div className="relative w-full lg:col-span-2">
+          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+            Buscador
+          </label>
           <Search
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+            className="absolute left-4 top-[34px] text-slate-400"
             size={18}
           />
           <input
             type="text"
-            placeholder="Buscar folio o nombre del cliente..."
+            placeholder="Folio o cliente..."
             value={searchTerm}
             onChange={handleFilterChange(setSearchTerm)}
-            className="w-full pl-12 pr-4 py-3 bg-[#f8faf9] border  text-sm focus:outline-none   p-3 rounded-lg focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 transition-all text-slate-800 font-medium  border-[#bec9c2]/40 "
+            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 transition-all font-medium text-slate-800"
           />
         </div>
 
-        <select
-          value={filterCliente}
-          onChange={handleFilterChange(setFilterCliente)}
-          className="w-full py-3 px-4 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none
-          focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-[#3f4944] transition-all"
-        >
-          <option value="">Todos los Clientes</option>
-          {clientes.map((c) => (
-            <option key={c.id} value={c.id.toString()}>
-              {c.razon_social}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filterEstado}
-          onChange={handleFilterChange(setFilterEstado)}
-          className="w-full py-3 px-4 bg-[#f8faf9] border
-           border-[#bec9c2]/40 rounded-lg text-sm focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-[#3f4944] transition-all"
-        >
-          <option value="">Cualquier Estado</option>
-          <option value="PAGADO">PAGADAS</option>
-          <option value="PENDIENTE">PENDIENTES</option>
-          <option value="CANCELADO">CANCELADAS</option>
-        </select>
-
-        <div className="flex gap-2 w-full">
+        <div>
+          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+            Cliente
+          </label>
           <select
-            value={filterMes}
-            onChange={handleFilterChange(setFilterMes)}
-            className="w-1/2 py-3 px-2 bg-[#f8faf9] border border-[#bec9c2]/40 rounded-lg 
-            text-sm focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-[#3f4944] transition-all"
+            value={filterCliente}
+            onChange={handleFilterChange(setFilterCliente)}
+            className="w-full py-3 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-slate-800 font-medium cursor-pointer"
           >
-            <option value="">Mes</option>
-            <option value="01">Enero</option>
-            <option value="02">Febrero</option>
-            <option value="03">Marzo</option>
-            <option value="04">Abril</option>
-            <option value="05">Mayo</option>
-            <option value="06">Junio</option>
-            <option value="07">Julio</option>
-            <option value="08">Agosto</option>
-            <option value="09">Septiembre</option>
-            <option value="10">Octubre</option>
-            <option value="11">Noviembre</option>
-            <option value="12">Diciembre</option>
+            <option value="">Todos los Clientes</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.id.toString()}>
+                {c.razon_social}
+              </option>
+            ))}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+            Estatus
+          </label>
           <select
-            value={filterAno}
-            onChange={handleFilterChange(setFilterAno)}
-            className="w-1/2 py-3 px-2 bg-[#f8faf9] border border-[#bec9c2]/40
-             rounded-lg text-sm focus:outline-none focus:ring-2 focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-[#3f4944] transition-all"
+            value={filterEstado}
+            onChange={handleFilterChange(setFilterEstado)}
+            className="w-full py-3 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-slate-800 font-medium cursor-pointer"
           >
-            <option value="">Año</option>
-            <option value="2026">2026</option>
-            <option value="2025">2025</option>
-            <option value="2024">2024</option>
-            <option value="2023">2023</option>
-            <option value="2022">2022</option>
+            <option value="">Cualquier Estado</option>
+            <option value="PAGADO">Pagadas</option>
+            <option value="PENDIENTE">Pendientes</option>
+            <option value="CANCELADO">Canceladas</option>
           </select>
+        </div>
+
+        <div className="lg:col-span-2 bg-blue-50/50 p-2 rounded-xl border border-blue-100 flex flex-col gap-2">
+          <div className="flex items-center justify-between px-1">
+            <label className="text-[10px] font-bold text-blue-800 uppercase tracking-widest">
+              Filtrar Fechas Por:
+            </label>
+            <select
+              value={filtroTipoFecha}
+              onChange={handleFilterChange(setFiltroTipoFecha)}
+              className="text-[10px] bg-white border border-blue-200 rounded px-2 py-0.5 font-bold text-blue-700 outline-none cursor-pointer"
+            >
+              <option value="emision">Emisión (Creación)</option>
+              <option value="pago">Fecha de Pago (Cierre)</option>
+            </select>
+          </div>
+
+          <div className="flex gap-2">
+            <select
+              value={filterMes}
+              onChange={handleFilterChange(setFilterMes)}
+              className="w-1/2 py-2.5 px-3 bg-white border border-blue-200 rounded-lg text-sm font-medium text-slate-800 cursor-pointer focus:outline-none focus:border-blue-700"
+            >
+              <option value="">Mes</option>
+              {[
+                "01",
+                "02",
+                "03",
+                "04",
+                "05",
+                "06",
+                "07",
+                "08",
+                "09",
+                "10",
+                "11",
+                "12",
+              ].map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterAno}
+              onChange={handleFilterChange(setFilterAno)}
+              className="w-1/2 py-2.5 px-3 bg-white border border-blue-200 rounded-lg text-sm font-medium text-slate-800 cursor-pointer focus:outline-none focus:border-blue-700"
+            >
+              <option value="">Año</option>
+              {["2026", "2025", "2024", "2023", "2022"].map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* TABLA */}
-      <div className="bg-white rounded-xl shadow-sm border border-[#bec9c2]/30 flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-[#f2f3ff] text-[#3f4944] uppercase tracking-wider text-[10px] font-bold border-b border-[#bec9c2]/30">
+            <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
               <tr>
                 <th className="p-4 w-24">Folio</th>
-                <th className="p-4">Fecha</th>
+                <th className="p-4">F. Emisión</th>
+                <th className="p-4">F. Pago</th>
                 <th className="p-4">Cliente</th>
-                <th className="p-4 text-right">Subtotal</th>
-                <th className="p-4 text-right">I.V.A.</th>
                 <th className="p-4 text-right">Total</th>
                 <th className="p-4 text-center">Estado</th>
                 <th className="p-4 text-center">Acciones</th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-[#bec9c2]/20">
+            <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="8" className="text-center p-12">
+                  <td colSpan="7" className="p-12 text-center">
                     <div className="flex flex-col items-center justify-center space-y-3">
-                      <div className="w-8 h-8 border-4 border-[#004532] border-t-transparent rounded-full animate-spin"></div>
-                      <span className="text-[#3f4944] font-bold text-sm">
+                      <div className="w-8 h-8 border-4 border-blue-700 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-slate-500 font-bold text-sm">
                         Cargando facturas...
                       </span>
                     </div>
@@ -305,22 +605,18 @@ export default function GestionFacturas() {
               ) : currentFacturas.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="8"
+                    colSpan="7"
                     className="p-12 text-center text-slate-400 font-medium"
                   >
-                    No se encontraron facturas con esos filtros.
+                    No se encontraron facturas con estos filtros.
                   </td>
                 </tr>
               ) : (
                 currentFacturas.map((f) => {
                   let statusColor =
-                    "bg-gray-100 text-gray-800 border border-gray-200";
-                  if (f.estados_factura?.nombre === "PAGADO")
-                    statusColor =
-                      "bg-[#e6f4ed] text-[#004532] border border-green-200";
-                  if (f.estados_factura?.nombre === "PENDIENTE")
-                    statusColor =
-                      "bg-orange-50 text-orange-700 border border-orange-200";
+                    f.estados_factura?.nombre === "PAGADO"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-orange-50 text-orange-700 border border-orange-200";
                   if (f.estados_factura?.nombre === "CANCELADO")
                     statusColor =
                       "bg-red-50 text-red-700 border border-red-200";
@@ -330,55 +626,50 @@ export default function GestionFacturas() {
                       key={f.id}
                       className="hover:bg-slate-50 transition-colors group"
                     >
-                      <td className="p-4 font-bold text-[#131b2e] group-hover:text-[#004532] transition-colors">
+                      <td className="p-4 font-bold text-[#131b2e] group-hover:text-blue-700 transition-colors">
                         {f.no_factura}
                       </td>
-                      <td className="p-4 text-[#3f4944]">
+                      <td className="p-4 text-slate-600 font-medium">
                         {new Date(f.fecha + "T12:00:00Z").toLocaleDateString(
                           "es-MX",
                         )}
                       </td>
-                      <td className="p-4">
-                        <p
-                          className="font-bold text-[#131b2e] truncate max-w-[250px]"
-                          title={f.clientes?.razon_social}
-                        >
-                          {f.clientes?.razon_social || "Desconocido"}
-                        </p>
+                      <td className="p-4 text-slate-500 text-xs italic">
+                        {f.fecha_pago
+                          ? new Date(
+                              f.fecha_pago + "T12:00:00Z",
+                            ).toLocaleDateString("es-MX")
+                          : "---"}
                       </td>
-                      <td className="p-4 text-right text-[#3f4944]">
-                        {formatCurrency(f.subtotal)}
+                      <td
+                        className="p-4 font-bold text-[#131b2e] truncate max-w-[250px]"
+                        title={f.clientes?.razon_social}
+                      >
+                        {f.clientes?.razon_social}
                       </td>
-                      <td className="p-4 text-right text-[#3f4944]">
-                        {formatCurrency(f.iva)}
-                      </td>
-                      <td className="p-4 text-right font-black text-[#004532]">
+                      <td className="p-4 text-right font-black text-[#131b2e]">
                         {formatCurrency(f.total)}
                       </td>
                       <td className="p-4 text-center">
                         <span
-                          className={`text-[10px] font-bold px-3 py-1 rounded-md uppercase tracking-wider shadow-sm ${statusColor}`}
+                          className={`text-[10px] font-bold px-3 py-1 rounded-md uppercase tracking-wide ${statusColor}`}
                         >
                           {f.estados_factura?.nombre}
                         </span>
                       </td>
-                      <td className="p-4">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => openModal(f)}
-                            className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-lg transition-colors shadow-sm"
-                            title="Editar Factura"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(f.id)}
-                            className="p-2 text-red-600 bg-red-50 hover:bg-red-600 hover:text-white rounded-lg transition-colors shadow-sm"
-                            title="Borrar Factura"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                      <td className="p-4 flex justify-center gap-2">
+                        <button
+                          onClick={() => openModal(f)}
+                          className="p-2 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(f.id)}
+                          className="p-2 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -388,43 +679,27 @@ export default function GestionFacturas() {
           </table>
         </div>
 
-        {/* PAGINACIÓN */}
         {!isLoading && filteredFacturas.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-[#bec9c2]/30 bg-[#f8faf9]">
-            <span className="text-xs text-[#3f4944] font-medium">
-              Mostrando{" "}
-              <span className="font-bold text-[#131b2e]">
-                {indexOfFirstItem + 1}
-              </span>{" "}
-              a{" "}
-              <span className="font-bold text-[#131b2e]">
-                {Math.min(indexOfLastItem, filteredFacturas.length)}
-              </span>{" "}
-              de{" "}
-              <span className="font-bold text-[#131b2e]">
-                {filteredFacturas.length}
-              </span>
+          <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-slate-200 bg-slate-50/50">
+            <span className="text-xs text-slate-500 font-medium">
+              Página{" "}
+              <span className="font-bold text-slate-800">{currentPage}</span> de{" "}
+              <span className="font-bold text-slate-800">{totalPages}</span>
             </span>
-
             <div className="flex items-center gap-2 mt-4 sm:mt-0">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                 disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-[#bec9c2]/30 text-[#131b2e] hover:bg-white hover:shadow-sm disabled:opacity-40 disabled:hover:bg-transparent disabled:shadow-none transition-all"
+                className="p-2 border border-slate-200 rounded-lg hover:bg-white disabled:opacity-40 bg-white"
               >
                 <ChevronLeft size={16} />
               </button>
-
-              <span className="text-xs font-bold px-3 text-[#131b2e] bg-white py-1.5 rounded-lg border border-[#bec9c2]/20 shadow-sm">
-                Página {currentPage} de {totalPages}
-              </span>
-
               <button
                 onClick={() =>
                   setCurrentPage((p) => Math.min(p + 1, totalPages))
                 }
                 disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-[#bec9c2]/30 text-[#131b2e] hover:bg-white hover:shadow-sm disabled:opacity-40 disabled:hover:bg-transparent disabled:shadow-none transition-all"
+                className="p-2 border border-slate-200 rounded-lg hover:bg-white disabled:opacity-40 bg-white"
               >
                 <ChevronRight size={16} />
               </button>
@@ -433,7 +708,6 @@ export default function GestionFacturas() {
         )}
       </div>
 
-      {/* MODAL */}
       {isModalOpen && (
         <FacturaFormModal
           isOpen={isModalOpen}

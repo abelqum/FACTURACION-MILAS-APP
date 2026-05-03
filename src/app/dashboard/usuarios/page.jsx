@@ -5,8 +5,9 @@ import {
   crearUsuarioDesdeAdmin,
   eliminarUsuarioDesdeAdmin,
 } from "@/app/_actions/usuarios";
-import { Trash2 } from "lucide-react";
+import { Trash2, UserPlus, Users, ShieldAlert } from "lucide-react";
 import Swal from "sweetalert2";
+
 export default function UsuariosCRUD() {
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -15,12 +16,9 @@ export default function UsuariosCRUD() {
     nombre: "",
     email: "",
     password: "",
-    rol: "admin",
+    rol: "empleado", // 🟢 Por defecto ahora es empleado
   });
 
-  // 1️⃣ PRIMERO DECLARAMOS LAS FUNCIONES
-
-  // 🟢 AVERIGUAR MI PROPIO ROL
   async function fetchMiRol() {
     try {
       const {
@@ -42,7 +40,6 @@ export default function UsuariosCRUD() {
     }
   }
 
-  // 🟢 TRAER LA LISTA DE USUARIOS
   async function fetchUsuarios() {
     try {
       const { data, error } = await supabase
@@ -60,16 +57,14 @@ export default function UsuariosCRUD() {
     }
   }
 
-  // 2️⃣ DESPUÉS LAS USAMOS EN EL USEEFFECT
   useEffect(() => {
     async function loadData() {
-      await fetchMiRol(); // Primero vemos qué permisos tengo
+      await fetchMiRol();
       await fetchUsuarios();
     }
     loadData();
   }, []);
 
-  // 3️⃣ EL RESTO DE LAS FUNCIONES QUE DEPENDEN DE LO ANTERIOR
   const handleCrearUsuario = async (e) => {
     e.preventDefault();
     setCargando(true);
@@ -79,8 +74,8 @@ export default function UsuariosCRUD() {
 
       if (res.error) {
         Swal.fire({
-          title: "Error al crear usuario: ",
-          text: error.message,
+          title: "Error al crear",
+          text: res.error,
           icon: "error",
           confirmButtonColor: "#d33",
         });
@@ -89,7 +84,7 @@ export default function UsuariosCRUD() {
           title: "¡Usuario Registrado!",
           text: "La cuenta se ha creado correctamente.",
           icon: "success",
-          confirmButtonColor: "#059669", // Verde esmeralda (blue-600)
+          confirmButtonColor: "#1d4ed8", // blue-700
           timer: 2500,
           showConfirmButton: false,
         });
@@ -97,7 +92,7 @@ export default function UsuariosCRUD() {
           nombre: "",
           email: "",
           password: "",
-          rol: "admin",
+          rol: "empleado",
         });
         await fetchUsuarios();
       }
@@ -119,19 +114,19 @@ export default function UsuariosCRUD() {
       const res = await eliminarUsuarioDesdeAdmin(id);
       if (res.error) {
         Swal.fire({
-          title: "Error al eliminar: ",
-          text: error.message,
+          title: "Error",
+          text: res.error,
           icon: "error",
-          confirmButtonColor: "#d33",
         });
       } else {
         Swal.fire({
-          title: "Usuario Eliminado",
-          text: "La cuenta y el perfil han sido eliminados correctamente.",
+          title: "Eliminado",
+          text: "El usuario ha sido borrado del sistema.",
           icon: "success",
-          confirmButtonColor: "#131b2e",
+          timer: 1500,
+          showConfirmButton: false,
         });
-        await fetchUsuarios(); // Refrescamos la tabla
+        await fetchUsuarios();
       }
     } catch (error) {
       console.error("Error al eliminar:", error);
@@ -139,158 +134,189 @@ export default function UsuariosCRUD() {
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-      {/* FORMULARIO */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
-        <h2 className="text-xl font-bold mb-6 text-blue-950 border-b border-blue-100 pb-3">
-          👤 Registrar Nuevo Usuario
-        </h2>
-
-        <form
-          onSubmit={handleCrearUsuario}
-          className="flex flex-col gap-4 text-sm"
-        >
-          <div className="flex flex-col gap-1">
-            <label className="font-bold text-slate-600 text-xs uppercase tracking-wider">
-              Nombre Completo
-            </label>
-            <input
-              type="text"
-              placeholder="Ej. Juan Pérez"
-              value={nuevoUsuario.nombre}
-              onChange={(e) =>
-                setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })
-              }
-              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
-              required
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="font-bold text-slate-600 text-xs uppercase tracking-wider">
-              Correo Electrónico
-            </label>
-            <input
-              type="email"
-              placeholder="usuario@woox.com"
-              value={nuevoUsuario.email}
-              onChange={(e) =>
-                setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })
-              }
-              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
-              required
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="font-bold text-slate-600 text-xs uppercase tracking-wider">
-              Contraseña Temporal
-            </label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={nuevoUsuario.password}
-              onChange={(e) =>
-                setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })
-              }
-              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
-              required
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="font-bold text-slate-600 text-xs uppercase tracking-wider">
-              Nivel de Acceso (Rol)
-            </label>
-            <select
-              value={nuevoUsuario.rol}
-              onChange={(e) =>
-                setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })
-              }
-              className="w-full border border-slate-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all bg-white"
-            >
-              <option value="admin">Administrador (Control Total)</option>
-              <option value="editor">Editor (Solo lectura/edición)</option>
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            disabled={cargando || miRol !== "admin"}
-            className="mt-2 bg-blue-700 text-white font-bold py-3 rounded-lg hover:bg-blue-800 transition-colors shadow-md shadow-blue-700/20 disabled:bg-slate-400 disabled:cursor-not-allowed"
-          >
-            {cargando ? "Registrando..." : "Crear Usuario"}
-          </button>
-        </form>
+    <div className="max-w-[90rem] mx-auto space-y-6">
+      {/* HEADER */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-6">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+            <Users className="text-blue-700" /> Gestión de Usuarios
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Administra los accesos y roles del equipo de trabajo.
+          </p>
+        </div>
       </div>
 
-      {/* TABLA RESPONSIVA */}
-      <div className="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[400px]">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="p-4 font-bold text-slate-500 text-xs uppercase tracking-wider">
-                  Nombre del Usuario
-                </th>
-                <th className="p-4 font-bold text-slate-500 text-xs uppercase tracking-wider text-center">
-                  Rol Asignado
-                </th>
-                {miRol === "admin" && (
-                  <th className="p-4 font-bold text-slate-500 text-xs uppercase tracking-wider text-center">
-                    Acciones
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        {/* FORMULARIO */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit sticky top-4">
+          <h2 className="text-sm font-bold mb-6 text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+            <UserPlus size={18} className="text-blue-700" /> Registrar Nuevo
+            Usuario
+          </h2>
+
+          <form
+            onSubmit={handleCrearUsuario}
+            className="flex flex-col gap-5 text-sm"
+          >
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                Nombre Completo
+              </label>
+              <input
+                type="text"
+                placeholder="Ej. Juan Pérez"
+                value={nuevoUsuario.nombre}
+                onChange={(e) =>
+                  setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })
+                }
+                className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl focus:ring-1 focus:ring-blue-700 focus:border-blue-700 focus:outline-none transition-all font-semibold text-slate-800"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                Correo Electrónico
+              </label>
+              <input
+                type="email"
+                placeholder="usuario@milas.com.mx"
+                value={nuevoUsuario.email}
+                onChange={(e) =>
+                  setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })
+                }
+                className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl focus:ring-1 focus:ring-blue-700 focus:border-blue-700 focus:outline-none transition-all font-semibold text-slate-800"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                Contraseña Temporal
+              </label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={nuevoUsuario.password}
+                onChange={(e) =>
+                  setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })
+                }
+                className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl focus:ring-1 focus:ring-blue-700 focus:border-blue-700 focus:outline-none transition-all font-semibold text-slate-800 tracking-widest"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                Nivel de Acceso (Rol)
+              </label>
+              {/* 🟢 AQUÍ ESTÁ EL CAMBIO A EMPLEADO */}
+              <select
+                value={nuevoUsuario.rol}
+                onChange={(e) =>
+                  setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })
+                }
+                className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl focus:ring-1 focus:ring-blue-700 focus:border-blue-700 focus:outline-none transition-all font-semibold text-slate-800 cursor-pointer"
+              >
+                <option value="empleado">
+                  Empleado (Tareas y vistas limitadas)
+                </option>
+                <option value="admin">Administrador (Control Total)</option>
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              disabled={cargando || miRol !== "admin"}
+              className="mt-2 bg-blue-700 text-white font-bold text-sm tracking-wide py-3.5 rounded-xl hover:bg-blue-800 transition-all shadow-lg shadow-blue-700/30 active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:text-slate-500 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+            >
+              {cargando ? "Registrando..." : "Crear Usuario"}
+            </button>
+
+            {miRol !== "admin" && (
+              <p className="text-[10px] text-orange-600 font-bold flex items-center gap-1 mt-2">
+                <ShieldAlert size={12} /> Solo un Administrador puede crear
+                usuarios.
+              </p>
+            )}
+          </form>
+        </div>
+
+        {/* TABLA RESPONSIVA */}
+        <div className="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden h-fit">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse whitespace-nowrap min-w-[400px]">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="p-4 font-bold text-slate-500 text-[10px] uppercase tracking-widest w-10">
+                    #
                   </th>
-                )}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {usuarios.map((u) => (
-                <tr
-                  key={u.id}
-                  className="hover:bg-slate-50/80 transition-colors"
-                >
-                  <td className="p-4 font-medium text-slate-800 text-sm">
-                    {u.nombre}
-                  </td>
-                  <td className="p-4 text-center">
-                    <span
-                      className={`px-4 py-1.5 rounded-md text-xs font-bold tracking-wide ${
-                        u.rol === "admin"
-                          ? "bg-blue-100 text-blue-800 border border-blue-200"
-                          : "bg-slate-100 text-slate-600 border border-slate-200"
-                      }`}
-                    >
-                      {u.rol.toUpperCase()}
-                    </span>
-                  </td>
-
+                  <th className="p-4 font-bold text-slate-500 text-[10px] uppercase tracking-widest">
+                    Nombre del Usuario
+                  </th>
+                  <th className="p-4 font-bold text-slate-500 text-[10px] uppercase tracking-widest text-center">
+                    Rol Asignado
+                  </th>
                   {miRol === "admin" && (
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => handleEliminar(u.id, u.nombre)}
-                        className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
-                        title="Eliminar usuario"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
+                    <th className="p-4 font-bold text-slate-500 text-[10px] uppercase tracking-widest text-center">
+                      Acciones
+                    </th>
                   )}
                 </tr>
-              ))}
+              </thead>
 
-              {usuarios.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={miRol === "admin" ? "3" : "2"}
-                    className="p-8 text-center text-slate-400 font-medium"
+              <tbody className="divide-y divide-slate-100">
+                {usuarios.map((u, index) => (
+                  <tr
+                    key={u.id}
+                    className="hover:bg-slate-50/80 transition-colors group"
                   >
-                    No hay usuarios o no tienes permiso para verlos.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    <td className="p-4 text-xs font-bold text-slate-400">
+                      {index + 1}
+                    </td>
+                    <td className="p-4 font-bold text-slate-800 text-sm">
+                      {u.nombre}
+                    </td>
+                    <td className="p-4 text-center">
+                      <span
+                        className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider shadow-sm ${
+                          u.rol === "admin"
+                            ? "bg-blue-50 text-blue-700 border border-blue-200"
+                            : "bg-slate-100 text-slate-600 border border-slate-200"
+                        }`}
+                      >
+                        {u.rol}
+                      </span>
+                    </td>
+
+                    {miRol === "admin" && (
+                      <td className="p-4 flex justify-center">
+                        <button
+                          onClick={() => handleEliminar(u.id, u.nombre)}
+                          className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          title="Eliminar usuario"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+
+                {usuarios.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={miRol === "admin" ? "4" : "3"}
+                      className="p-8 text-center text-slate-400 font-medium text-sm"
+                    >
+                      No hay usuarios o no tienes permiso para verlos.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

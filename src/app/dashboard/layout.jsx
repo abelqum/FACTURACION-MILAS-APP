@@ -9,6 +9,7 @@ export default function DashboardLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null); // 🟢 ESTADO PARA EL ROL
 
   // ESTADO DEL MENÚ LATERAL
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -26,7 +27,15 @@ export default function DashboardLayout({ children }) {
           if (error) await supabase.auth.signOut();
           router.push("/portal");
         } else {
-          setUser(session.user);
+          // 🟢 BUSCAMOS EL ROL DEL USUARIO EN LA TABLA PERFILES
+          const { data: perfil } = await supabase
+            .from("perfiles")
+            .select("rol, nombre")
+            .eq("id", session.user.id)
+            .single();
+
+          setUser({ ...session.user, nombre: perfil?.nombre });
+          setUserRole(perfil?.rol || "empleado"); // Por defecto si no tiene, es empleado
         }
       } catch (err) {
         await supabase.auth.signOut();
@@ -63,14 +72,50 @@ export default function DashboardLayout({ children }) {
     router.push("/");
   };
 
-  // 🟢 RUTAS ACTUALIZADAS
-  const navLinks = [
-    { name: "Inicio", href: "/dashboard", icon: "🏠" },
-    { name: "Facturas", href: "/dashboard/facturas", icon: "📄" },
-    { name: "Directorio de Clientes", href: "/dashboard/clientes", icon: "📇" },
-    { name: "Usuarios", href: "/dashboard/usuarios", icon: "👥" },
-    { name: "Configuración", href: "/dashboard/configuracion", icon: "⚙️" },
+  // 🟢 RUTAS ACTUALIZADAS CON PROTECCIÓN
+  const allLinks = [
+    {
+      name: "Inicio",
+      href: "/dashboard",
+      icon: "🏠",
+      roles: ["admin", "editor", "empleado"],
+    },
+    {
+      name: "Tareas",
+      href: "/dashboard/tareas",
+      icon: "✅",
+      roles: ["admin", "editor", "empleado"],
+    }, // 🟢 Nueva ruta
+    {
+      name: "Facturas",
+      href: "/dashboard/facturas",
+      icon: "📄",
+      roles: ["admin", "editor"],
+    },
+    {
+      name: "Directorio de Clientes",
+      href: "/dashboard/clientes",
+      icon: "📇",
+      roles: ["admin", "editor"],
+    },
+    {
+      name: "Usuarios",
+      href: "/dashboard/usuarios",
+      icon: "👥",
+      roles: ["admin"],
+    },
+    {
+      name: "Configuración",
+      href: "/dashboard/configuracion",
+      icon: "⚙️",
+      roles: ["admin"],
+    },
   ];
+
+  // 🟢 Filtramos el menú para que solo se muestre lo que su rol permite
+  const navLinks = allLinks.filter(
+    (link) => userRole && link.roles.includes(userRole),
+  );
 
   return (
     /* 🟢 CORRECCIÓN: Usamos un div contenedor en lugar de html/body para no romper Next.js */
@@ -91,14 +136,15 @@ export default function DashboardLayout({ children }) {
 
           {/* SIDEBAR RESPONSIVO Y OCULTABLE */}
           <aside
-            className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-blue-950 text-white flex flex-col shadow-2xl transition-all duration-300 ease-in-out ${
-              isSidebarOpen
-                ? "translate-x-0 md:ml-0"
-                : "-translate-x-full md:-ml-72"
-            }`}
+            className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-blue-950
+               text-white flex flex-col shadow-2xl  transition-all duration-300 ease-in-out ${
+                 isSidebarOpen
+                   ? "translate-x-0 md:ml-0"
+                   : "-translate-x-full md:-ml-72"
+               }`}
           >
             <div className="flex h-16 items-center justify-between px-6 border-b border-blue-800 bg-blue-950 shrink-0">
-              <h2 className="text-2xl font-black tracking-widest text-white">
+              <h2 className="text-2xl  text-center font-black tracking-widest text-white">
                 MILAS
               </h2>
               <button
@@ -144,7 +190,7 @@ export default function DashboardLayout({ children }) {
               })}
 
               <Link
-                href="/"
+                href="https://www.milas.com.mx"
                 target="_blank"
                 className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-blue-200 hover:bg-blue-800 transition-all border border-blue-700/50"
               >
@@ -182,9 +228,15 @@ export default function DashboardLayout({ children }) {
               </div>
 
               <div className="flex items-center gap-4">
-                <span className="hidden md:inline text-sm font-medium text-slate-600">
-                  {user?.nombre || user?.email}
-                </span>
+                <div className="flex flex-col items-end">
+                  <span className="hidden md:inline text-sm font-medium text-slate-600">
+                    {user?.nombre || user?.email}
+                  </span>
+                  {/* 🟢 Mostramos el rol debajo del nombre de usuario */}
+                  <span className="hidden md:inline text-[10px] font-bold text-blue-700 uppercase tracking-widest">
+                    {userRole}
+                  </span>
+                </div>
                 <button
                   onClick={handleLogout}
                   className="text-xs md:text-sm font-bold text-red-600 hover:text-red-800 transition-colors bg-red-50 px-4 py-2 rounded-lg"
