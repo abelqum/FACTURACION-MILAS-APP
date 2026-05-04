@@ -108,7 +108,7 @@ export default function DashboardLayout({ children }) {
       name: "Configuración",
       href: "/dashboard/configuracion",
       icon: "⚙️",
-      roles: ["admin"],
+      roles: ["admin", "empleado"],
     },
   ];
 

@@ -209,78 +209,60 @@ export default function Dashboard() {
     );
   }
 
-  // 🟢 VISTA EXCLUSIVA PARA EMPLEADOS
   if (usuarioActivo?.rol === "empleado") {
     return (
       <div className="max-w-4xl mx-auto space-y-8 mt-4">
+        {/* TARJETA AZUL DE BIENVENIDA */}
         <div className="bg-blue-700 rounded-3xl p-8 text-white shadow-lg shadow-blue-700/20 relative overflow-hidden">
-          <div className="absolute right-[-20px] top-[-20px] opacity-10">
-            <User size={200} />
-          </div>
-          <h1 className="text-3xl font-black relative z-10 uppercase tracking-wide">
+          <h1 className="text-3xl font-black relative z-10 uppercase tracking-wide text-center">
             ¡Bienvenido(a), {usuarioActivo.nombre.split(" ")[0]}!
           </h1>
-          <p className="text-blue-200 font-medium mt-2 relative z-10">
-            Aquí tienes un resumen de tus actividades pendientes para hoy.
-          </p>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <h2 className="font-bold text-slate-800 text-sm uppercase tracking-widest mb-6 flex items-center gap-2 border-b border-slate-100 pb-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></span>
-            Mis Tareas Pendientes ({misTareas.length})
-          </h2>
+        {/* TARJETA INFORMATIVA (LETRAS ESPACIOSAS Y CLARAS) */}
+        <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-sm flex items-start gap-8 relative overflow-hidden group">
+          <div className="absolute left-0 top-0 bottom-0 w-2 bg-blue-500"></div>
 
-          {misTareas.length === 0 ? (
-            <div className="bg-slate-50 border border-slate-200 border-dashed rounded-xl p-12 text-center">
-              <CheckCircle2
-                size={40}
-                className="mx-auto text-emerald-400 mb-3"
-              />
-              <p className="text-slate-500 font-bold text-lg">
-                ¡Al día con todo!
-              </p>
-              <p className="text-slate-400 text-sm">
-                No tienes tareas asignadas por ahora.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {misTareas.map((tarea) => (
-                <div
-                  key={tarea.id}
-                  className="bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col hover:border-blue-300 transition-all group"
-                >
-                  <div className="flex items-start gap-3">
-                    <button
-                      onClick={() => toggleTarea(tarea.id)}
-                      className="text-slate-300 hover:text-emerald-500 mt-0.5 transition-colors shrink-0"
-                    >
-                      <Circle size={26} strokeWidth={2.5} />
-                    </button>
-                    <div>
-                      <h4 className="font-bold text-slate-800 text-lg">
-                        {tarea.titulo}
-                      </h4>
-                      {tarea.descripcion && (
-                        <p className="text-sm text-slate-500 mt-1">
-                          {tarea.descripcion}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-3 tracking-widest">
-                        Asignada por: {tarea.creador?.nombre}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="hidden sm:flex p-5 bg-blue-50 text-blue-600 rounded-2xl shrink-0 group-hover:scale-110 transition-transform duration-300"></div>
+
+          <div className="flex flex-col gap-6">
+            <h2 className="text-2xl font-black text-slate-800 tracking-wide">
+              Guía rápida de tu portal 💡
+            </h2>
+
+            {/* Textos con leading-loose (interlineado amplio) y tracking-wide (espaciado de letras) */}
+            <p className="text-[15px] font-medium text-slate-600 leading-loose tracking-wide">
+              En este espacio de trabajo encontrarás las herramientas necesarias
+              para tu día a día en{" "}
+              <span className="font-bold text-blue-700">
+                MILAS Equipos Industriales
+              </span>
+              .
+            </p>
+
+            <p className="text-[15px] font-medium text-slate-600 leading-loose tracking-wide">
+              Para revisar, gestionar y completar las actividades que tienes
+              asignadas, por favor dirígete a la sección de{" "}
+              <span className="font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md">
+                Tareas
+              </span>{" "}
+              en el menú lateral izquierdo. Ahí podrás ver todos los detalles y
+              marcar tus avances.
+            </p>
+
+            <p className="text-[15px] font-medium text-slate-600 leading-loose tracking-wide">
+              También tienes acceso a la pestaña de{" "}
+              <span className="font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md">
+                Configuración
+              </span>
+              , donde podrás cambiar tu contraseña temporal por una personal más
+              segura.{" "}
+            </p>
+          </div>
         </div>
       </div>
     );
   }
-
   // 🟢 VISTA PARA ADMINISTRADORES (GRÁFICAS)
   return (
     <div className="max-w-[90rem] mx-auto space-y-8">
