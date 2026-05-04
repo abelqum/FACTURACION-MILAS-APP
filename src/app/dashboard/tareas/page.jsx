@@ -2,8 +2,16 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import Swal from "sweetalert2";
-import { Plus, CheckCircle2, CalendarClock, ListTodo, X } from "lucide-react";
-// 🟢 Importamos los nuevos componentes
+import {
+  Plus,
+  CheckCircle2,
+  CalendarClock,
+  ListTodo,
+  X,
+  Filter,
+} from "lucide-react";
+
+// 🟢 Importamos los componentes externos
 import TareaCard from "@/app/_components/TareaCard";
 import TareaDetalleModal from "@/app/_components/TareaDetalleModal";
 
@@ -23,6 +31,9 @@ export default function GestionTareas() {
   const [descripcion, setDescripcion] = useState("");
   const [fechaLimite, setFechaLimite] = useState("");
   const [asignados, setAsignados] = useState([]);
+
+  // 🟢 ESTADO DEL FILTRO
+  const [filtroUsuario, setFiltroUsuario] = useState("todos");
 
   useEffect(() => {
     cargarDatos();
@@ -49,19 +60,13 @@ export default function GestionTareas() {
         .order("nombre");
       setUsuarios(perfiles || []);
 
-      let query = supabase
+      const { data: tareasData, error: tareasError } = await supabase
         .from("tareas")
         .select(`*, creador:perfiles!tareas_creado_por_fkey(nombre)`)
         .order("estado", { ascending: false })
         .order("fecha_limite", { ascending: true, nullsFirst: false });
 
-      if (miPerfil.rol === "empleado") {
-        query = query.contains("asignados_ids", [miPerfil.id]);
-      }
-
-      const { data: tareasData, error: tareasError } = await query;
       if (tareasError) throw tareasError;
-
       setTareas(tareasData || []);
     } catch (error) {
       console.error("Error cargando tareas:", error);
@@ -148,7 +153,7 @@ export default function GestionTareas() {
     try {
       await supabase.from("tareas").delete().eq("id", id);
       cargarDatos();
-      if (tareaSeleccionada?.id === id) setIsModalDetalleOpen(false); // Cierra detalle si lo borras desde ahí
+      if (tareaSeleccionada?.id === id) setIsModalDetalleOpen(false);
     } catch (error) {
       console.error(error);
     }
@@ -163,34 +168,76 @@ export default function GestionTareas() {
     return nombres.join(", ");
   };
 
-  const tareasPendientes = tareas.filter((t) => t.estado === "pendiente");
-  const tareasCompletadas = tareas.filter((t) => t.estado === "completada");
+  // 🟢 LÓGICA DE FILTRADO
+  const tareasFiltradas = tareas.filter((t) => {
+    if (miUsuario?.rol === "empleado")
+      return t.asignados_ids?.includes(miUsuario?.id);
+    if (filtroUsuario === "todos") return true;
+    if (filtroUsuario === "mis_tareas")
+      return t.asignados_ids?.includes(miUsuario?.id);
+    return t.asignados_ids?.includes(filtroUsuario);
+  });
+
+  const tareasPendientes = tareasFiltradas.filter(
+    (t) => t.estado === "pendiente",
+  );
+  const tareasCompletadas = tareasFiltradas.filter(
+    (t) => t.estado === "completada",
+  );
 
   return (
     <div className="max-w-[90rem] mx-auto space-y-6">
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-6">
+      {/* 🟢 HEADER CORREGIDO: Todo a la izquierda, sin desbordamientos */}
+      <div className="border-b border-slate-200 pb-6 space-y-4">
+        {/* Títulos */}
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
             <ListTodo className="text-blue-700" /> Control de Tareas
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Visualiza y gestiona las actividades conjuntas del equipo.
+          <p className="text-sm text-slate-500 mt-1 font-medium">
+            Visualiza y gestiona las actividades del equipo.
           </p>
         </div>
-        <button
-          onClick={abrirModalCrear}
-          className="mt-4 sm:mt-0 bg-blue-700 text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-blue-800 transition-all shadow-md active:scale-95"
-        >
-          <Plus size={16} /> Nueva Tarea
-        </button>
+
+        {/* Controles alineados a la izquierda y con flex-wrap para que bajen solos si no caben */}
+        <div className="flex flex-wrap items-center gap-3">
+          {(miUsuario?.rol === "admin" || miUsuario?.rol === "editor") && (
+            <div className="relative w-full sm:w-auto flex items-center justify-start ">
+              <select
+                value={filtroUsuario}
+                onChange={(e) => setFiltroUsuario(e.target.value)}
+                className="w-full sm:w-64 pl-10 p-3 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent shadow-sm cursor-pointer appearance-none truncate"
+              >
+                <option value="todos">Mostrar todas las tareas</option>
+                <option value="mis_tareas">Mis tareas asignadas</option>
+                <optgroup label="Equipo de Trabajo">
+                  {usuarios
+                    .filter((u) => u.id !== miUsuario?.id)
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        Tareas de {u.nombre}
+                      </option>
+                    ))}
+                </optgroup>
+              </select>
+            </div>
+          )}
+
+          <button
+            onClick={abrirModalCrear}
+            className="bg-blue-700 p-5 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-800 transition-all shadow-md shadow-blue-700/20 active:scale-95 shrink-0"
+          >
+            <Plus size={16} /> Nueva Tarea
+          </button>
+        </div>
       </div>
 
+      {/* ÁREA DE TARJETAS */}
       <div className="space-y-8">
         {/* PENDIENTES */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <h3 className="font-bold text-slate-800 text-sm uppercase tracking-widest mb-6 flex items-center gap-2 border-b border-slate-100 pb-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></span>{" "}
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse"></span>
             Pendientes ({tareasPendientes.length})
           </h3>
 
@@ -205,12 +252,11 @@ export default function GestionTareas() {
                 className="mx-auto text-emerald-400 mb-3"
               />
               <p className="text-slate-500 font-bold text-lg">
-                ¡Excelente trabajo!
+                ¡No hay tareas pendientes aquí!
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {/* 🟢 MAPEO LIMPIO USANDO EL NUEVO COMPONENTE */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {tareasPendientes.map((tarea) => (
                 <TareaCard
                   key={tarea.id}
@@ -232,11 +278,10 @@ export default function GestionTareas() {
         {tareasCompletadas.length > 0 && (
           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
             <h3 className="font-bold text-slate-500 text-sm uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-slate-200 pb-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>{" "}
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
               Completadas ({tareasCompletadas.length})
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {/* 🟢 MAPEO LIMPIO USANDO EL NUEVO COMPONENTE */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {tareasCompletadas.map((tarea) => (
                 <TareaCard
                   key={tarea.id}
@@ -255,7 +300,7 @@ export default function GestionTareas() {
         )}
       </div>
 
-      {/* 🟢 MODAL DE DETALLES */}
+      {/* MODAL DE DETALLES */}
       <TareaDetalleModal
         isOpen={isModalDetalleOpen}
         onClose={() => setIsModalDetalleOpen(false)}
@@ -305,8 +350,8 @@ export default function GestionTareas() {
                   required
                   value={titulo}
                   onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Ej. Realizar corte de caja..."
-                  className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 font-semibold text-slate-800"
+                  placeholder="Ej. Realizar mantenimiento a..."
+                  className="w-full bg-white border border-slate-300 p-3 rounded-xl focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 font-semibold text-slate-800 shadow-sm"
                 />
               </div>
               <div>
@@ -318,7 +363,7 @@ export default function GestionTareas() {
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
                   placeholder="Instrucciones adicionales..."
-                  className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-slate-800 resize-none"
+                  className="w-full bg-white border border-slate-300 p-3 rounded-xl focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 text-slate-800 resize-none shadow-sm"
                 />
               </div>
               <div>
@@ -329,7 +374,7 @@ export default function GestionTareas() {
                   type="datetime-local"
                   value={fechaLimite}
                   onChange={(e) => setFechaLimite(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 font-bold text-blue-800 cursor-pointer"
+                  className="w-full bg-white border border-slate-300 p-3 rounded-xl focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 font-bold text-blue-800 cursor-pointer shadow-sm"
                 />
               </div>
               {(miUsuario?.rol === "admin" || miUsuario?.rol === "editor") && (
@@ -337,11 +382,11 @@ export default function GestionTareas() {
                   <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-widest mb-2">
                     Asignar a (Individual o Conjunta)
                   </label>
-                  <div className="max-h-40 overflow-y-auto bg-slate-50 border border-slate-300 rounded-xl p-2 space-y-1">
+                  <div className="max-h-40 overflow-y-auto bg-slate-50 border border-slate-200 rounded-xl p-2 space-y-1 shadow-inner">
                     {usuarios.map((u) => (
                       <label
                         key={u.id}
-                        className="flex items-center gap-3 p-2 hover:bg-slate-200/50 rounded-lg cursor-pointer transition-colors"
+                        className="flex items-center gap-3 p-2 hover:bg-slate-200/60 rounded-lg cursor-pointer transition-colors"
                       >
                         <input
                           type="checkbox"
@@ -352,7 +397,7 @@ export default function GestionTareas() {
                         <span className="text-sm font-semibold text-slate-700">
                           {u.nombre}
                         </span>
-                        <span className="text-[9px] uppercase font-bold text-slate-400 ml-auto tracking-widest">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 ml-auto tracking-widest bg-white px-2 py-0.5 rounded shadow-sm">
                           {u.rol}
                         </span>
                       </label>
@@ -366,7 +411,7 @@ export default function GestionTareas() {
               <button
                 type="button"
                 onClick={() => setIsModalCrearOpen(false)}
-                className="px-6 py-2.5 font-bold text-slate-500 hover:bg-slate-200/50 rounded-xl transition-all text-sm tracking-wide"
+                className="px-6 py-2.5 font-bold text-slate-500 hover:bg-slate-200/70 hover:text-slate-800 rounded-xl transition-all text-sm tracking-wide"
               >
                 Cancelar
               </button>

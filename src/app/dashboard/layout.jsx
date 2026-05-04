@@ -98,6 +98,13 @@ export default function DashboardLayout({ children }) {
       icon: "📇",
       roles: ["admin", "editor"],
     },
+
+    {
+      name: "Correo",
+      href: "/dashboard/correo",
+      icon: "✉️",
+      roles: ["admin"],
+    },
     {
       name: "Usuarios",
       href: "/dashboard/usuarios",

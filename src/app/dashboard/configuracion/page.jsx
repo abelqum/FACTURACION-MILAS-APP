@@ -10,7 +10,11 @@ import {
   User,
   Eye,
   EyeOff,
+  PenTool,
 } from "lucide-react";
+import dynamic from "next/dynamic";
+const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
+import "react-quill-new/dist/quill.snow.css";
 
 export default function ConfiguracionPage() {
   const [isBackupLoading, setIsBackupLoading] = useState(false);
@@ -27,7 +31,8 @@ export default function ConfiguracionPage() {
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
+  const [firma, setFirma] = useState("");
+  const [isFirmaLoading, setIsFirmaLoading] = useState(false);
   useEffect(() => {
     let isMounted = true; // Control para evitar memory leaks
 
@@ -42,13 +47,14 @@ export default function ConfiguracionPage() {
         // 🟢 AHORA TAMBIÉN PEDIMOS EL ROL
         const { data, error } = await supabase
           .from("perfiles")
-          .select("nombre, rol")
+          .select("nombre, rol,firma_html")
           .eq("id", user.id)
           .single();
 
         if (data && !error && isMounted) {
           setCurrentName(data.nombre);
           setUserRole(data.rol);
+          setFirma(data.firma_html || ""); // 🟢 Cargar la firma
         }
       }
     };
@@ -60,7 +66,27 @@ export default function ConfiguracionPage() {
       isMounted = false;
     };
   }, []);
-
+  const handleGuardarFirma = async () => {
+    setIsFirmaLoading(true);
+    try {
+      await supabase
+        .from("perfiles")
+        .update({ firma_html: firma })
+        .eq("id", currentUserId);
+      Swal.fire({
+        icon: "success",
+        title: "Firma guardada",
+        toast: true,
+        position: "top-end",
+        timer: 3000,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      Swal.fire("Error", "No se pudo guardar la firma.", "error");
+    } finally {
+      setIsFirmaLoading(false);
+    }
+  };
   const handleDescargarRespaldo = async () => {
     setIsBackupLoading(true);
     try {
@@ -296,7 +322,29 @@ export default function ConfiguracionPage() {
           </button>
         </form>
       </div>
-
+      {/* SECCIÓN DE FIRMA DE CORREO */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <h2 className="text-xl font-black mb-5 text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+          <PenTool size={24} className="text-blue-700" /> Mi Firma de Correo
+        </h2>
+        <div className="space-y-4">
+          <ReactQuill
+            theme="snow"
+            value={firma}
+            onChange={setFirma}
+            className="bg-white rounded-xl text-slate-800"
+          />
+          <div className="flex justify-end">
+            <button
+              onClick={handleGuardarFirma}
+              disabled={isFirmaLoading}
+              className="bg-blue-700 text-white font-bold py-3 px-8 rounded-xl hover:bg-blue-800 transition-all text-xs uppercase tracking-widest disabled:opacity-50"
+            >
+              {isFirmaLoading ? "Guardando..." : "Guardar Firma"}
+            </button>
+          </div>
+        </div>
+      </div>
       {/* ======================================================= */}
       {/* ── SECCIÓN DE RESPALDOS (SOLO VISIBLE PARA ADMIN) ── */}
       {/* ======================================================= */}
