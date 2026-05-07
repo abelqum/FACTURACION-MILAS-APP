@@ -87,6 +87,12 @@ export default function DashboardLayout({ children }) {
       roles: ["admin", "editor", "empleado"],
     }, // 🟢 Nueva ruta
     {
+      name: "Inventario",
+      href: "/dashboard/inventario",
+      icon: "📦",
+      roles: ["admin", "empleado"],
+    },
+    {
       name: "Facturas",
       href: "/dashboard/facturas",
       icon: "📄",
