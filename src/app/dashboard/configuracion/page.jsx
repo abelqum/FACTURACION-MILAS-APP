@@ -638,9 +638,6 @@ export default function ConfiguracionPage() {
         </form>
       </div>
 
-      {/* ======================================================= */}
-      {/* ── SECCIONES RESTRINGIDAS (SOLO VISIBLES PARA ADMIN) ── */}
-      {/* ======================================================= */}
       {userRole === "admin" && (
         <>
           {/* SECCIÓN DE FIRMA DE CORREO */}
