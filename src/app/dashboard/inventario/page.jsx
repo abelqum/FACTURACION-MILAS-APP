@@ -17,6 +17,9 @@ import {
   X,
   FileText,
   Link as LinkIcon,
+  PackagePlus,
+  PackageMinus,
+  Wrench,
 } from "lucide-react";
 
 import ModalAjusteStock from "@/app/_components/ModalAjusteStock";
@@ -36,7 +39,6 @@ export default function InventarioPage() {
     almacen: "",
     estatus: "",
   });
-
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 15;
 
@@ -90,22 +92,21 @@ export default function InventarioPage() {
   };
 
   const cargarInventario = async () => {
+    // 🟢 AQUÍ ESTABA EL ERROR: Le quitamos la subconsulta de kits que confundía a Supabase
     const { data, error } = await supabase
       .from("inventario")
       .select(
         `
         *, 
-        udm:inventario_udm(nombre), 
-        marca:inventario_marcas(nombre), 
-        almacen:inventario_almacenes(nombre), 
-        condicion:inventario_condiciones(nombre),
-        categoria:inventario_categorias(nombre),
-        proveedor:inventario_proveedores(nombre, enlace),
-        medida_cat:inventario_medidas(nombre)
+        udm:inventario_udm(nombre), marca:inventario_marcas(nombre), almacen:inventario_almacenes(nombre), 
+        condicion:inventario_condiciones(nombre), categoria:inventario_categorias(nombre),
+        proveedor:inventario_proveedores(nombre, enlace), medida_cat:inventario_medidas(nombre)
       `,
       )
       .order("descripcion");
-    if (!error) setInventario(data);
+
+    if (error) console.error("Error cargando inventario:", error);
+    if (!error) setInventario(data || []);
     setCargando(false);
   };
 
@@ -142,7 +143,139 @@ export default function InventarioPage() {
     setPaginaActual(1);
   };
 
+  // 🟢 ARMAR KIT CORREGIDO (Consultas separadas para evitar errores)
+  const armarKit = async (kit) => {
+    Swal.fire({
+      title: "Verificando stock...",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+    try {
+      const { data: componentes } = await supabase
+        .from("kit_componentes")
+        .select("*")
+        .eq("id_kit", kit.id);
+
+      let faltantes = [];
+      let detallesComponentes = [];
+
+      // Validamos el stock actual de cada pieza
+      for (let comp of componentes) {
+        const { data: prod } = await supabase
+          .from("inventario")
+          .select("descripcion, cantidad")
+          .eq("id", comp.id_producto)
+          .single();
+        if (Number(prod.cantidad) < Number(comp.cantidad_necesaria)) {
+          faltantes.push(
+            `• ${prod.descripcion} (Te faltan ${Number(comp.cantidad_necesaria) - Number(prod.cantidad)})`,
+          );
+        }
+        detallesComponentes.push({ ...comp, actualStock: prod.cantidad });
+      }
+
+      if (faltantes.length > 0) {
+        return Swal.fire(
+          "Stock Insuficiente",
+          "No puedes armar este kit. Te faltan las siguientes piezas:\n\n" +
+            faltantes.join("\n"),
+          "error",
+        );
+      }
+
+      Swal.fire({
+        title: "Armando Kit...",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      // Descontamos piezas
+      for (let comp of detallesComponentes) {
+        const nuevoStock =
+          Number(comp.actualStock) - Number(comp.cantidad_necesaria);
+        await supabase
+          .from("inventario")
+          .update({ cantidad: nuevoStock })
+          .eq("id", comp.id_producto);
+      }
+
+      // Sumamos al kit
+      await supabase
+        .from("inventario")
+        .update({ cantidad: Number(kit.cantidad) + 1 })
+        .eq("id", kit.id);
+
+      cargarInventario();
+      Swal.fire({
+        icon: "success",
+        title: "Kit Armado",
+        toast: true,
+        position: "top-end",
+        timer: 2500,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      Swal.fire("Error", "Fallo al armar kit: " + error.message, "error");
+    }
+  };
+
+  // 🟢 DESARMAR KIT CORREGIDO
+  const desarmarKit = async (kit) => {
+    if (Number(kit.cantidad) <= 0)
+      return Swal.fire(
+        "Atención",
+        "No tienes kits armados para desarmar.",
+        "warning",
+      );
+    Swal.fire({
+      title: "Desarmando Kit...",
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+      const { data: componentes } = await supabase
+        .from("kit_componentes")
+        .select("*")
+        .eq("id_kit", kit.id);
+
+      // Devolvemos piezas
+      for (let comp of componentes) {
+        const { data: prod } = await supabase
+          .from("inventario")
+          .select("cantidad")
+          .eq("id", comp.id_producto)
+          .single();
+        const nuevoStock =
+          Number(prod.cantidad) + Number(comp.cantidad_necesaria);
+        await supabase
+          .from("inventario")
+          .update({ cantidad: nuevoStock })
+          .eq("id", comp.id_producto);
+      }
+
+      // Restamos al kit
+      await supabase
+        .from("inventario")
+        .update({ cantidad: Number(kit.cantidad) - 1 })
+        .eq("id", kit.id);
+
+      cargarInventario();
+      Swal.fire({
+        icon: "success",
+        title: "Kit Desarmado",
+        toast: true,
+        position: "top-end",
+        timer: 2500,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      Swal.fire("Error", "Fallo al desarmar kit: " + error.message, "error");
+    }
+  };
+
   const generarCatalogoPDF = async () => {
+    // ... [Tu código original de PDF que funciona perfecto] ...
     if (inventarioFiltrado.length === 0)
       return Swal.fire("Atención", "No hay productos en la lista.", "warning");
     Swal.fire({
@@ -220,11 +353,11 @@ export default function InventarioPage() {
         doc.roundedRect(x, y, cardWidth, cardHeight, 3, 3);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
+        const nombreProducto = producto.es_kit
+          ? `[KIT] ${producto.descripcion}`
+          : producto.descripcion || "Sin descripción";
         doc.text(
-          doc.splitTextToSize(
-            producto.descripcion || "Sin descripción",
-            cardWidth - 6,
-          ),
+          doc.splitTextToSize(nombreProducto, cardWidth - 6),
           x + 3,
           y + 6,
         );
@@ -263,7 +396,6 @@ export default function InventarioPage() {
     }
   };
 
-  // 🟢 LÓGICA DE FILTRADO COMPUESTO
   const inventarioFiltrado = inventario.filter((p) => {
     const matchBusqueda =
       p.descripcion?.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -276,13 +408,11 @@ export default function InventarioPage() {
     const matchAlmacen = filtros.almacen
       ? p.id_almacen == filtros.almacen
       : true;
-
     let matchEstatus = true;
     if (filtros.estatus === "comprar")
       matchEstatus = Number(p.cantidad) <= Number(p.stock_minimo);
     if (filtros.estatus === "suficiente")
       matchEstatus = Number(p.cantidad) > Number(p.stock_minimo);
-
     return (
       matchBusqueda &&
       matchMarca &&
@@ -306,7 +436,6 @@ export default function InventarioPage() {
 
   return (
     <div className="max-w-[90rem] mx-auto space-y-6">
-      {/* HEADER */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 border-b border-slate-200 pb-6">
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
@@ -316,7 +445,6 @@ export default function InventarioPage() {
             Gestión, existencias y valoración.
           </p>
         </div>
-
         <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center gap-4 w-full xl:w-auto shadow-sm">
           <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
             <DollarSign size={24} strokeWidth={3} />
@@ -333,13 +461,12 @@ export default function InventarioPage() {
             </p>
           </div>
         </div>
-
         <div className="flex gap-2 w-full xl:w-auto shrink-0 flex-wrap">
           <button
             onClick={generarCatalogoPDF}
             className="flex-1 xl:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors shadow-sm"
           >
-            <FileText size={16} /> Catálogo PDF
+            <FileText size={16} /> PDF
           </button>
           <button
             onClick={() => setIsModalScannerOpen(true)}
@@ -376,11 +503,10 @@ export default function InventarioPage() {
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[60vh]">
         <div className="overflow-x-auto flex-1">
-          {/* 🟢 TABLA DE 8 COLUMNAS CON ENLACE SEPARADO */}
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
               <tr>
-                <th className="p-4">Producto</th>
+                <th className="p-4">Producto / Kit</th>
                 <th className="p-4">Categoría</th>
                 <th className="p-4">Proveedor</th>
                 <th className="p-4 text-center">Enlace</th>
@@ -407,7 +533,7 @@ export default function InventarioPage() {
                   return (
                     <tr
                       key={p.id}
-                      className="hover:bg-slate-50 transition-colors"
+                      className={`transition-colors ${p.es_kit ? "bg-indigo-50/20 hover:bg-indigo-50/50" : "hover:bg-slate-50"}`}
                     >
                       <td className="p-4">
                         <div className="font-bold text-slate-800 flex items-center gap-3">
@@ -428,11 +554,20 @@ export default function InventarioPage() {
                             </div>
                           ) : (
                             <div className="w-12 h-12 bg-slate-100 flex items-center justify-center rounded-xl border border-slate-200 shrink-0">
-                              <QrCode className="text-slate-300" size={16} />
+                              {p.es_kit ? (
+                                <Wrench className="text-slate-400" size={16} />
+                              ) : (
+                                <QrCode className="text-slate-300" size={16} />
+                              )}
                             </div>
                           )}
                           <div>
-                            <p className="whitespace-normal min-w-[180px] max-w-[250px] leading-tight mb-1">
+                            <p className="whitespace-normal min-w-[180px] max-w-[250px] leading-tight mb-1 flex items-center gap-2">
+                              {p.es_kit && (
+                                <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[9px] uppercase tracking-widest shrink-0">
+                                  KIT
+                                </span>
+                              )}
                               {p.descripcion}
                             </p>
                             <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -441,14 +576,15 @@ export default function InventarioPage() {
                                   {p.medida_cat.nombre}
                                 </span>
                               )}
-                              <span className="text-[10px] text-slate-500">
-                                Mod: {p.modelo || "N/A"} • {p.marca?.nombre}
-                              </span>
+                              {!p.es_kit && (
+                                <span className="text-[10px] text-slate-500">
+                                  Mod: {p.modelo || "N/A"} • {p.marca?.nombre}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
                       </td>
-
                       <td className="p-4">
                         {p.categoria ? (
                           <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-widest font-bold">
@@ -460,7 +596,6 @@ export default function InventarioPage() {
                           </span>
                         )}
                       </td>
-
                       <td className="p-4">
                         {p.proveedor ? (
                           <span
@@ -475,7 +610,6 @@ export default function InventarioPage() {
                           </span>
                         )}
                       </td>
-
                       <td className="p-4 text-center">
                         {p.proveedor?.enlace ? (
                           <a
@@ -483,7 +617,6 @@ export default function InventarioPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center justify-center bg-blue-50 text-blue-600 p-2 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                            title="Abrir enlace del proveedor"
                           >
                             <LinkIcon size={16} />
                           </a>
@@ -493,28 +626,28 @@ export default function InventarioPage() {
                           </span>
                         )}
                       </td>
-
                       <td className="p-4">
                         <p className="font-bold text-slate-700 text-xs">
-                          {p.almacen?.nombre}
+                          {p.almacen?.nombre ||
+                            (p.es_kit ? "Zona de Kits" : "N/A")}
                         </p>
                         <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
                           Fila: {p.fila || "N/A"}
                         </p>
                       </td>
-
                       <td className="p-4 text-center">
                         <span
-                          className={`text-base font-black ${
-                            solicitar ? "text-red-600" : "text-blue-700"
-                          }`}
+                          className={`text-base font-black ${p.es_kit ? "text-indigo-700" : solicitar ? "text-red-600" : "text-blue-700"}`}
                         >
                           {p.cantidad}
                         </span>
                       </td>
-
                       <td className="p-4 text-center">
-                        {solicitar ? (
+                        {p.es_kit ? (
+                          <span className="inline-flex items-center justify-center gap-1 text-[9px] font-black px-2 py-1 bg-indigo-100 text-indigo-700 rounded uppercase tracking-widest">
+                            Ensamblaje
+                          </span>
+                        ) : solicitar ? (
                           <span className="inline-flex items-center justify-center gap-1 text-[9px] font-black px-2 py-1 bg-red-100 text-red-700 rounded uppercase tracking-widest">
                             <AlertTriangle size={10} /> Comprar
                           </span>
@@ -524,17 +657,35 @@ export default function InventarioPage() {
                           </span>
                         )}
                       </td>
-
                       <td className="p-4 text-center">
-                        <button
-                          onClick={() => {
-                            setProductoToEdit(p);
-                            setIsModalAddOpen(true);
-                          }}
-                          className="p-2 bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 rounded-lg transition-colors font-bold text-[10px] uppercase flex items-center gap-1 mx-auto"
-                        >
-                          <Edit2 size={14} /> Editar
-                        </button>
+                        {p.es_kit ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => armarKit(p)}
+                              className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors font-bold text-[10px] uppercase flex items-center gap-1"
+                              title="Armar Kit"
+                            >
+                              <PackagePlus size={16} />
+                            </button>
+                            <button
+                              onClick={() => desarmarKit(p)}
+                              className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg transition-colors font-bold text-[10px] uppercase flex items-center gap-1"
+                              title="Desarmar Kit"
+                            >
+                              <PackageMinus size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setProductoToEdit(p);
+                              setIsModalAddOpen(true);
+                            }}
+                            className="p-2 bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 rounded-lg transition-colors font-bold text-[10px] uppercase flex items-center gap-1 mx-auto"
+                          >
+                            <Edit2 size={14} /> Editar
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -553,7 +704,6 @@ export default function InventarioPage() {
             </tbody>
           </table>
         </div>
-
         {!cargando && inventarioFiltrado.length > itemsPorPagina && (
           <div className="bg-slate-50 border-t border-slate-200 p-4 flex justify-between items-center shrink-0">
             <button
@@ -578,7 +728,6 @@ export default function InventarioPage() {
           </div>
         )}
       </div>
-
       {isModalScannerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 relative overflow-hidden">
@@ -605,14 +754,12 @@ export default function InventarioPage() {
           </div>
         </div>
       )}
-
       <ModalAjusteStock
         isOpen={isModalAjusteOpen}
         onClose={() => setIsModalAjusteOpen(false)}
         producto={productoScanner}
         onActualizado={cargarInventario}
       />
-
       <ModalFormProducto
         isOpen={isModalAddOpen}
         onClose={() => setIsModalAddOpen(false)}
