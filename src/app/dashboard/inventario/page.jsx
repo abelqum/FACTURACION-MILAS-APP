@@ -339,7 +339,7 @@ export default function InventarioPage() {
             onClick={generarCatalogoPDF}
             className="flex-1 xl:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors shadow-sm"
           >
-            <FileText size={16} /> PDF
+            <FileText size={16} /> Catálogo PDF
           </button>
           <button
             onClick={() => setIsModalScannerOpen(true)}
