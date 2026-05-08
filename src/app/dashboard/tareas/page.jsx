@@ -169,15 +169,31 @@ export default function GestionTareas() {
   };
 
   // 🟢 LÓGICA DE FILTRADO
+  // 🟢 LÓGICA DE FILTRADO
   const tareasFiltradas = tareas.filter((t) => {
-    if (miUsuario?.rol === "empleado")
-      return t.asignados_ids?.includes(miUsuario?.id);
-    if (filtroUsuario === "todos") return true;
+    // 1. Filtros exclusivos para Empleados
+    if (miUsuario?.rol === "empleado") {
+      if (filtroUsuario === "mis_tareas")
+        return t.asignados_ids?.includes(miUsuario?.id);
+      if (filtroUsuario === "asignadas_por_mi")
+        return t.creado_por === miUsuario?.id;
+      // "todos" para empleado significa: las que me tocan + las que yo asigne
+      return (
+        t.asignados_ids?.includes(miUsuario?.id) ||
+        t.creado_por === miUsuario?.id
+      );
+    }
+
+    // 2. Filtros para Administradores / Editores
+    if (filtroUsuario === "todos") return true; // El admin sí ve literalmente TODO el sistema
     if (filtroUsuario === "mis_tareas")
       return t.asignados_ids?.includes(miUsuario?.id);
+    if (filtroUsuario === "asignadas_por_mi")
+      return t.creado_por === miUsuario?.id;
+
+    // Si seleccionó el nombre de alguien en específico
     return t.asignados_ids?.includes(filtroUsuario);
   });
-
   const tareasPendientes = tareasFiltradas.filter(
     (t) => t.estado === "pendiente",
   );
@@ -201,24 +217,34 @@ export default function GestionTareas() {
 
         {/* Controles alineados a la izquierda y con flex-wrap para que bajen solos si no caben */}
         <div className="flex flex-wrap items-center gap-3">
-          {(miUsuario?.rol === "admin" || miUsuario?.rol === "editor") && (
-            <div className="relative w-full sm:w-auto flex items-center justify-start ">
+          {(miUsuario?.rol === "admin" || miUsuario?.rol === "empleado") && (
+            <div className="relative w-full sm:w-auto flex items-center justify-start">
               <select
                 value={filtroUsuario}
                 onChange={(e) => setFiltroUsuario(e.target.value)}
-                className="w-full sm:w-64 pl-10 p-3 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent shadow-sm cursor-pointer appearance-none truncate"
+                className="w-full sm:w-64 pl-4 p-3 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent shadow-sm cursor-pointer appearance-none truncate"
               >
-                <option value="todos">Mostrar todas las tareas</option>
-                <option value="mis_tareas">Mis tareas asignadas</option>
-                <optgroup label="Equipo de Trabajo">
-                  {usuarios
-                    .filter((u) => u.id !== miUsuario?.id)
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>
-                        Tareas de {u.nombre}
-                      </option>
-                    ))}
-                </optgroup>
+                <option value="todos">
+                  {miUsuario?.rol === "admin"
+                    ? "Mostrar todas las tareas"
+                    : "Todas mis actividades"}
+                </option>
+                <option value="mis_tareas">Lo que me toca hacer</option>
+                <option value="asignadas_por_mi">Lo que delegué a otros</option>
+
+                {/* Solo los administradores pueden filtrar por nombres del resto del equipo */}
+                {(miUsuario?.rol === "admin" ||
+                  miUsuario?.rol === "editor") && (
+                  <optgroup label="Equipo de Trabajo">
+                    {usuarios
+                      .filter((u) => u.id !== miUsuario?.id)
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          Tareas de {u.nombre}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           )}
@@ -377,7 +403,8 @@ export default function GestionTareas() {
                   className="w-full bg-white border border-slate-300 p-3 rounded-xl focus:outline-none focus:border-blue-700 focus:ring-1 focus:ring-blue-700 font-bold text-blue-800 cursor-pointer shadow-sm"
                 />
               </div>
-              {(miUsuario?.rol === "admin" || miUsuario?.rol === "editor") && (
+              {(miUsuario?.rol === "admin" ||
+                miUsuario?.rol === "empleado") && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-widest mb-2">
                     Asignar a (Individual o Conjunta)
