@@ -25,6 +25,8 @@ import {
   Wrench,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+
+// Editor de texto enriquecido para la firma
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
 import "react-quill-new/dist/quill.snow.css";
 
@@ -44,22 +46,26 @@ const CATALOGOS = [
 ];
 
 export default function ConfiguracionPage() {
+  // --- ESTADOS DE CARGA ---
   const [isBackupLoading, setIsBackupLoading] = useState(false);
+  const [isNameLoading, setIsNameLoading] = useState(false);
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false);
+  const [isFirmaLoading, setIsFirmaLoading] = useState(false);
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
+
+  // --- ESTADOS DE PERFIL ---
   const [currentUserId, setCurrentUserId] = useState(null);
   const [currentName, setCurrentName] = useState("");
   const [userRole, setUserRole] = useState(null);
-  const [isNameLoading, setIsNameLoading] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [firma, setFirma] = useState("");
-  const [isFirmaLoading, setIsFirmaLoading] = useState(false);
 
+  // --- ESTADOS DE CATÁLOGOS Y KITS ---
   const [catalogoActivo, setCatalogoActivo] = useState(CATALOGOS[0]);
   const [itemsCatalogo, setItemsCatalogo] = useState([]);
-  const [cargandoCatalogos, setCargandoCatalogos] = useState(false);
   const [listaAbierta, setListaAbierta] = useState(true);
   const [formCatalogo, setFormCatalogo] = useState({ nombre: "", enlace: "" });
   const [editandoCatId, setEditandoCatId] = useState(null);
@@ -71,6 +77,7 @@ export default function ConfiguracionPage() {
     componentes: [{ id_producto: "", cantidad_necesaria: 1 }],
   });
 
+  // 1. CARGA INICIAL DE DATOS DE USUARIO
   useEffect(() => {
     let isMounted = true;
     const fetchMiPerfil = async () => {
@@ -81,7 +88,7 @@ export default function ConfiguracionPage() {
         setCurrentUserId(user.id);
         const { data, error } = await supabase
           .from("perfiles")
-          .select("nombre, rol,firma_html")
+          .select("nombre, rol, firma_html")
           .eq("id", user.id)
           .single();
         if (data && !error && isMounted) {
@@ -97,11 +104,13 @@ export default function ConfiguracionPage() {
     };
   }, []);
 
+  // 2. CARGA DE CONTENIDO SEGÚN LA PESTAÑA ACTIVA
   useEffect(() => {
     if (catalogoActivo.isCustom) cargarDatosKits();
     else cargarItemsCatalogo();
   }, [catalogoActivo]);
 
+  // --- LÓGICA DE CATÁLOGOS NORMALES ---
   const cargarItemsCatalogo = async () => {
     setCargandoCatalogos(true);
     const { data, error } = await supabase
@@ -132,43 +141,42 @@ export default function ConfiguracionPage() {
       cargarItemsCatalogo();
       Swal.fire({
         icon: "success",
-        title: "Guardado",
+        title: "Registro guardado",
         toast: true,
         position: "top-end",
         timer: 2000,
         showConfirmButton: false,
       });
     } catch (error) {
-      Swal.fire("Error", "No se pudo guardar.", "error");
+      Swal.fire("Error", "No se pudo procesar la solicitud.", "error");
     }
-  };
-
-  const iniciarEdicionCatalogo = (item) => {
-    setFormCatalogo({ nombre: item.nombre, enlace: item.enlace || "" });
-    setEditandoCatId(item.id);
-    setListaAbierta(false);
   };
 
   const eliminarCatalogo = async (id) => {
     const confirm = await Swal.fire({
-      title: "¿Estás seguro?",
-      text: "Si este item ya está en uso, no podrás borrarlo.",
+      title: "¿Borrar ítem?",
+      text: "Si está en uso no podrá eliminarse.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
-      confirmButtonText: "Sí, borrar",
+      confirmButtonText: "Eliminar",
     });
     if (confirm.isConfirmed) {
       const { error } = await supabase
         .from(catalogoActivo.id)
         .delete()
         .eq("id", id);
-      if (error) Swal.fire("Error", "Este item ya está siendo usado.", "error");
+      if (error)
+        Swal.fire(
+          "Error",
+          "Este ítem está vinculado a productos existentes.",
+          "error",
+        );
       else {
         cargarItemsCatalogo();
         Swal.fire({
           icon: "success",
-          title: "Borrado",
+          title: "Eliminado",
           toast: true,
           position: "top-end",
           timer: 2000,
@@ -178,31 +186,24 @@ export default function ConfiguracionPage() {
     }
   };
 
-  // 🟢 CARGA DE KITS CORREGIDA (Emparejamiento en JS)
+  // --- LÓGICA DE KITS / ENSAMBLES ---
   const cargarDatosKits = async () => {
     setCargandoCatalogos(true);
-
-    // 1. Cargamos catálogo de piezas normales
     const { data: prods } = await supabase
       .from("inventario")
       .select("id, descripcion, modelo")
       .eq("es_kit", false)
       .order("descripcion");
     setProductosParaKits(prods || []);
-
-    // 2. Cargamos los kits (encabezados)
     const { data: kits } = await supabase
       .from("inventario")
       .select("id, descripcion, cantidad, qr_url")
       .eq("es_kit", true)
       .order("descripcion");
-
-    // 3. Cargamos las recetas
     const { data: recetas } = await supabase
       .from("kit_componentes")
       .select("*");
 
-    // 4. Emparejamos a mano para que Supabase no se queje
     const kitsArmados = (kits || []).map((kit) => {
       const misComponentes = (recetas || [])
         .filter((r) => r.id_kit === kit.id)
@@ -219,54 +220,17 @@ export default function ConfiguracionPage() {
         });
       return { ...kit, kit_componentes: misComponentes };
     });
-
     setKitsList(kitsArmados);
     setCargandoCatalogos(false);
   };
 
-  const handleAddComponente = () =>
-    setFormKit({
-      ...formKit,
-      componentes: [
-        ...formKit.componentes,
-        { id_producto: "", cantidad_necesaria: 1 },
-      ],
-    });
-  const handleRemoveComponente = (index) => {
-    const nuevos = [...formKit.componentes];
-    nuevos.splice(index, 1);
-    setFormKit({ ...formKit, componentes: nuevos });
-  };
-  const handleComponenteChange = (index, field, value) => {
-    const nuevos = [...formKit.componentes];
-    nuevos[index][field] = value;
-    setFormKit({ ...formKit, componentes: nuevos });
-  };
-
-  const iniciarEdicionKit = (kit) => {
-    setFormKit({
-      descripcion: kit.descripcion,
-      componentes: kit.kit_componentes.map((c) => ({
-        id_producto: c.id_producto,
-        cantidad_necesaria: c.cantidad_necesaria,
-      })),
-    });
-    setEditandoCatId(kit.id);
-    setListaAbierta(false);
-  };
-
   const guardarKit = async (e) => {
     e.preventDefault();
-    if (!formKit.descripcion.trim()) return;
     const componentesValidos = formKit.componentes.filter(
       (c) => c.id_producto !== "" && Number(c.cantidad_necesaria) > 0,
     );
     if (componentesValidos.length === 0)
-      return Swal.fire(
-        "Atención",
-        "El kit debe tener al menos un producto.",
-        "warning",
-      );
+      return Swal.fire("Atención", "Define al menos un componente.", "warning");
 
     setCargandoCatalogos(true);
     try {
@@ -285,25 +249,18 @@ export default function ConfiguracionPage() {
           cantidad_necesaria: c.cantidad_necesaria,
         }));
         await supabase.from("kit_componentes").insert(insertData);
-        Swal.fire({
-          icon: "success",
-          title: "Actualizado",
-          toast: true,
-          position: "top-end",
-          timer: 2000,
-          showConfirmButton: false,
-        });
       } else {
-        const payloadKit = {
-          descripcion: formKit.descripcion,
-          es_kit: true,
-          cantidad: 0,
-          stock_minimo: 0,
-          precio_unitario: 0,
-        };
         const { data: nuevoKit } = await supabase
           .from("inventario")
-          .insert([payloadKit])
+          .insert([
+            {
+              descripcion: formKit.descripcion,
+              es_kit: true,
+              cantidad: 0,
+              stock_minimo: 0,
+              precio_unitario: 0,
+            },
+          ])
           .select()
           .single();
         const qrDataUrl = await QRCode.toDataURL(nuevoKit.id, { width: 300 });
@@ -315,32 +272,22 @@ export default function ConfiguracionPage() {
           u8arr[n] = bstr.charCodeAt(n);
         }
         const fileName = `qr_${nuevoKit.id}.png`;
-        const { error: uploadError } = await supabase.storage
+        await supabase.storage
           .from("qr")
           .upload(fileName, new Blob([u8arr], { type: "image/png" }));
-        if (!uploadError) {
-          const { data: publicUrlData } = supabase.storage
-            .from("qr")
-            .getPublicUrl(fileName);
-          await supabase
-            .from("inventario")
-            .update({ qr_url: publicUrlData.publicUrl })
-            .eq("id", nuevoKit.id);
-        }
+        const { data: publicUrlData } = supabase.storage
+          .from("qr")
+          .getPublicUrl(fileName);
+        await supabase
+          .from("inventario")
+          .update({ qr_url: publicUrlData.publicUrl })
+          .eq("id", nuevoKit.id);
         const insertData = componentesValidos.map((c) => ({
           id_kit: nuevoKit.id,
           id_producto: c.id_producto,
           cantidad_necesaria: c.cantidad_necesaria,
         }));
         await supabase.from("kit_componentes").insert(insertData);
-        Swal.fire({
-          icon: "success",
-          title: "Kit Creado",
-          toast: true,
-          position: "top-end",
-          timer: 2500,
-          showConfirmButton: false,
-        });
       }
       setFormKit({
         descripcion: "",
@@ -348,8 +295,16 @@ export default function ConfiguracionPage() {
       });
       setEditandoCatId(null);
       cargarDatosKits();
+      Swal.fire({
+        icon: "success",
+        title: "Kit guardado",
+        toast: true,
+        position: "top-end",
+        timer: 2500,
+        showConfirmButton: false,
+      });
     } catch (error) {
-      Swal.fire("Error", "Fallo al guardar el Kit.", "error");
+      Swal.fire("Error", "Fallo al crear kit.", "error");
     } finally {
       setCargandoCatalogos(false);
     }
@@ -357,15 +312,15 @@ export default function ConfiguracionPage() {
 
   const eliminarKit = async (kit) => {
     const confirm = await Swal.fire({
-      title: "¿Borrar este Kit?",
+      title: "¿Borrar Kit?",
       text:
         kit.cantidad > 0
-          ? `Este kit tiene ${kit.cantidad} armados. Si lo borras, sus piezas se devolverán al inventario.`
-          : "Se borrará la receta de este kit.",
+          ? "El stock se devolverá a las piezas originales."
+          : "Se borrará la receta.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
-      confirmButtonText: "Sí, desarmar y borrar",
+      confirmButtonText: "Desarmar y Borrar",
     });
     if (confirm.isConfirmed) {
       setCargandoCatalogos(true);
@@ -377,59 +332,117 @@ export default function ConfiguracionPage() {
               .select("cantidad")
               .eq("id", comp.id_producto)
               .single();
-            const piezasADevolver =
-              Number(comp.cantidad_necesaria) * Number(kit.cantidad);
             await supabase
               .from("inventario")
-              .update({ cantidad: Number(prodData.cantidad) + piezasADevolver })
+              .update({
+                cantidad:
+                  Number(prodData.cantidad) +
+                  Number(comp.cantidad_necesaria) * Number(kit.cantidad),
+              })
               .eq("id", comp.id_producto);
           }
         }
+        // 🟢 LIMPIEZA DE BUCKET
+        await supabase.storage.from("qr").remove([`qr_${kit.id}.png`]);
         await supabase.from("inventario").delete().eq("id", kit.id);
         cargarDatosKits();
-        Swal.fire({
-          icon: "success",
-          title: "Kit Eliminado",
-          toast: true,
-          position: "top-end",
-          timer: 2500,
-          showConfirmButton: false,
-        });
+        Swal.fire({ icon: "success", title: "Kit borrado con éxito" });
       } catch (error) {
-        Swal.fire("Error", "Hubo un problema al borrar.", "error");
+        Swal.fire("Error", "No se pudo borrar.", "error");
       } finally {
         setCargandoCatalogos(false);
       }
     }
   };
 
-  const handleGuardarFirma = async () => {
-    /* ... (Omitido por espacio visual pero tú ya lo tienes) ... */
-  };
-  const handleDescargarRespaldo = async () => {
-    /* ... */
-  };
+  // --- LÓGICA DE PERFIL Y SEGURIDAD ---
   const handleChangeName = async (e) => {
-    /* ... */
+    e.preventDefault();
+    if (!currentName.trim()) return;
+    setIsNameLoading(true);
+    const { error } = await supabase
+      .from("perfiles")
+      .update({ nombre: currentName.trim() })
+      .eq("id", currentUserId);
+    if (!error)
+      Swal.fire({
+        icon: "success",
+        title: "Nombre actualizado",
+        toast: true,
+        position: "top-end",
+        timer: 3000,
+        showConfirmButton: false,
+      });
+    setIsNameLoading(false);
   };
+
   const handleChangePassword = async (e) => {
-    /* ... */
+    e.preventDefault();
+    if (newPassword !== confirmPassword)
+      return Swal.fire("Error", "Las contraseñas no coinciden", "error");
+    setIsPasswordLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (!error) {
+      Swal.fire("Éxito", "Contraseña cambiada", "success");
+      setNewPassword("");
+      setConfirmPassword("");
+    } else {
+      Swal.fire("Error", error.message, "error");
+    }
+    setIsPasswordLoading(false);
+  };
+
+  // --- LÓGICA DE ADMIN (FIRMA Y BACKUP) ---
+  const handleGuardarFirma = async () => {
+    setIsFirmaLoading(true);
+    const { error } = await supabase
+      .from("perfiles")
+      .update({ firma_html: firma })
+      .eq("id", currentUserId);
+    if (!error)
+      Swal.fire({
+        icon: "success",
+        title: "Firma guardada",
+        toast: true,
+        position: "top-end",
+        timer: 3000,
+        showConfirmButton: false,
+      });
+    setIsFirmaLoading(false);
+  };
+
+  const handleDescargarRespaldo = async () => {
+    setIsBackupLoading(true);
+    try {
+      const response = await fetch("/api/backup?download=true");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `respaldo_milas_${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+    } catch (e) {
+      Swal.fire("Error", "Fallo al generar respaldo", "error");
+    }
+    setIsBackupLoading(false);
   };
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12">
       <div className="border-b border-slate-200 pb-6">
-        <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-          Ajustes y Configuración
+        <h1 className="text-2xl font-black text-slate-800">
+          Configuración MILAS
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Gestiona tu perfil, catálogos del sistema y seguridad.
+        <p className="text-sm text-slate-500 font-medium">
+          Gestión de sistema, perfiles y seguridad.
         </p>
       </div>
+
+      {/* SECCIÓN CATÁLOGOS Y KITS */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
         <h2 className="text-xl font-black text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
-          <Settings size={24} className="text-blue-700" /> Administrador de
-          Sistema
+          <Settings size={22} className="text-blue-700" /> Administrador de
+          Catálogos
         </h2>
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {CATALOGOS.map((cat) => (
@@ -438,15 +451,10 @@ export default function ConfiguracionPage() {
               type="button"
               onClick={() => {
                 setCatalogoActivo(cat);
-                setFormCatalogo({ nombre: "", enlace: "" });
-                setFormKit({
-                  descripcion: "",
-                  componentes: [{ id_producto: "", cantidad_necesaria: 1 }],
-                });
                 setEditandoCatId(null);
                 setListaAbierta(true);
               }}
-              className={`px-4 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${catalogoActivo.id === cat.id ? "bg-slate-800 text-white shadow-md" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all ${catalogoActivo.id === cat.id ? "bg-slate-800 text-white shadow-md" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
             >
               {cat.icono} {cat.titulo}
             </button>
@@ -454,92 +462,72 @@ export default function ConfiguracionPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Formulario Izquierdo */}
           <div className="lg:col-span-1 bg-slate-50 border border-slate-200 rounded-2xl p-5 h-fit">
-            <h3 className="font-black text-slate-700 mb-4 flex items-center gap-2">
-              {editandoCatId ? (
-                <Edit2 size={16} className="text-blue-600" />
-              ) : (
-                <Plus size={16} className="text-emerald-600" />
-              )}
-              {editandoCatId
-                ? "Editar Registro"
-                : `Nuevo en ${catalogoActivo.titulo}`}
+            <h3 className="font-black text-slate-700 mb-4 text-sm uppercase tracking-widest">
+              {editandoCatId ? "Editar" : "Nuevo Registro"}
             </h3>
             {catalogoActivo.isCustom ? (
               <form onSubmit={guardarKit} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
-                    Nombre del Kit *
-                  </label>
-                  <input
-                    required
-                    type="text"
-                    value={formKit.descripcion}
-                    onChange={(e) =>
-                      setFormKit({ ...formKit, descripcion: e.target.value })
-                    }
-                    placeholder="Ej. Kit Mantenimiento"
-                    className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600"
-                  />
-                </div>
-                <div className="border-t border-slate-200 pt-4 space-y-3">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 flex justify-between items-center">
-                    <span>Receta del Kit</span>
-                    <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                      {formKit.componentes.length} Ítems
-                    </span>
-                  </label>
-                  {formKit.componentes.map((comp, index) => (
+                <input
+                  required
+                  type="text"
+                  value={formKit.descripcion}
+                  onChange={(e) =>
+                    setFormKit({ ...formKit, descripcion: e.target.value })
+                  }
+                  placeholder="Nombre del Kit..."
+                  className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold focus:border-blue-600"
+                />
+                <div className="pt-4 space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Componentes:
+                  </p>
+                  {formKit.componentes.map((comp, i) => (
                     <div
-                      key={index}
-                      className="flex gap-2 items-start bg-white p-2 rounded-xl border border-slate-200 shadow-sm"
+                      key={i}
+                      className="flex gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm"
                     >
                       <div className="flex-1 space-y-2">
                         <select
                           required
                           value={comp.id_producto}
-                          onChange={(e) =>
-                            handleComponenteChange(
-                              index,
-                              "id_producto",
-                              e.target.value,
-                            )
-                          }
-                          className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-600"
+                          onChange={(e) => {
+                            const n = [...formKit.componentes];
+                            n[i].id_producto = e.target.value;
+                            setFormKit({ ...formKit, componentes: n });
+                          }}
+                          className="w-full bg-slate-50 border-none p-1.5 text-xs font-bold"
                         >
-                          <option value="">Elegir producto...</option>
+                          <option value="">Producto...</option>
                           {productosParaKits.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {p.descripcion} (Mod: {p.modelo || "N/A"})
+                              {p.descripcion}
                             </option>
                           ))}
                         </select>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-slate-400">
-                            CANTIDAD:
-                          </span>
-                          <input
-                            required
-                            type="number"
-                            min="1"
-                            step="0.01"
-                            value={comp.cantidad_necesaria}
-                            onChange={(e) =>
-                              handleComponenteChange(
-                                index,
-                                "cantidad_necesaria",
-                                e.target.value,
-                              )
-                            }
-                            className="w-full bg-slate-50 border border-slate-200 p-1.5 rounded-lg text-xs font-bold text-center focus:outline-none focus:border-blue-600"
-                          />
-                        </div>
+                        <input
+                          required
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          value={comp.cantidad_necesaria}
+                          onChange={(e) => {
+                            const n = [...formKit.componentes];
+                            n[i].cantidad_necesaria = e.target.value;
+                            setFormKit({ ...formKit, componentes: n });
+                          }}
+                          className="w-full bg-slate-50 border-none p-1 text-xs font-black text-center"
+                        />
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleRemoveComponente(index)}
-                        disabled={formKit.componentes.length === 1}
-                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30"
+                        onClick={() => {
+                          const n = [...formKit.componentes];
+                          n.splice(i, 1);
+                          setFormKit({ ...formKit, componentes: n });
+                        }}
+                        className="text-slate-300 hover:text-red-500 p-1"
                       >
                         <MinusCircle size={16} />
                       </button>
@@ -547,247 +535,286 @@ export default function ConfiguracionPage() {
                   ))}
                   <button
                     type="button"
-                    onClick={handleAddComponente}
-                    className="w-full py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs uppercase hover:bg-slate-200 border border-dashed border-slate-300 flex items-center justify-center gap-1"
+                    onClick={() =>
+                      setFormKit({
+                        ...formKit,
+                        componentes: [
+                          ...formKit.componentes,
+                          { id_producto: "", cantidad_necesaria: 1 },
+                        ],
+                      })
+                    }
+                    className="w-full py-2 bg-white text-blue-600 rounded-xl font-bold text-[10px] uppercase border border-dashed border-blue-200"
                   >
-                    <Plus size={14} /> Agregar producto
+                    + Agregar Componente
                   </button>
                 </div>
-                <div className="flex gap-2 pt-4">
-                  {editandoCatId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditandoCatId(null);
-                        setFormKit({
-                          descripcion: "",
-                          componentes: [
-                            { id_producto: "", cantidad_necesaria: 1 },
-                          ],
-                        });
-                      }}
-                      className="flex-1 py-3 bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase hover:bg-slate-300"
-                    >
-                      Cancelar
-                    </button>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={cargandoCatalogos}
-                    className="flex-1 py-3 bg-blue-700 text-white rounded-xl font-bold text-xs uppercase hover:bg-blue-800 flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <Save size={16} /> {editandoCatId ? "Guardar" : "Crear Kit"}
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-blue-700 text-white rounded-xl font-black text-xs uppercase hover:bg-blue-800 shadow-lg shadow-blue-700/20"
+                >
+                  {editandoCatId ? "Actualizar Kit" : "Crear Kit"}
+                </button>
               </form>
             ) : (
               <form onSubmit={guardarCatalogo} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
-                    Nombre *
-                  </label>
+                <input
+                  required
+                  type="text"
+                  value={formCatalogo.nombre}
+                  onChange={(e) =>
+                    setFormCatalogo({ ...formCatalogo, nombre: e.target.value })
+                  }
+                  placeholder="Nombre..."
+                  className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold"
+                />
+                {catalogoActivo.extraField === "enlace" && (
                   <input
-                    required
-                    type="text"
-                    value={formCatalogo.nombre}
+                    type="url"
+                    value={formCatalogo.enlace}
                     onChange={(e) =>
                       setFormCatalogo({
                         ...formCatalogo,
-                        nombre: e.target.value,
+                        enlace: e.target.value,
                       })
                     }
-                    className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600"
+                    placeholder="Enlace Maps/Tienda..."
+                    className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm"
                   />
-                </div>
-                {catalogoActivo.extraField === "enlace" && (
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
-                      Enlace
-                    </label>
-                    <input
-                      type="url"
-                      value={formCatalogo.enlace}
-                      onChange={(e) =>
-                        setFormCatalogo({
-                          ...formCatalogo,
-                          enlace: e.target.value,
-                        })
-                      }
-                      className="w-full p-3 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:border-blue-600"
-                    />
-                  </div>
                 )}
-                <div className="flex gap-2 pt-2">
-                  {editandoCatId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditandoCatId(null);
-                        setFormCatalogo({ nombre: "", enlace: "" });
-                      }}
-                      className="flex-1 py-3 bg-slate-200 text-slate-700 rounded-xl font-bold text-xs uppercase hover:bg-slate-300"
-                    >
-                      Cancelar
-                    </button>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={cargandoCatalogos}
-                    className="flex-1 py-3 bg-blue-700 text-white rounded-xl font-bold text-xs uppercase hover:bg-blue-800 flex items-center justify-center gap-2"
-                  >
-                    <Save size={16} /> Guardar
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase hover:bg-slate-900 shadow-md"
+                >
+                  Guardar Registro
+                </button>
               </form>
             )}
           </div>
 
+          {/* Lista Derecha */}
           <div className="lg:col-span-2 h-fit">
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
               <button
                 type="button"
                 onClick={() => setListaAbierta(!listaAbierta)}
-                className={`w-full p-4 bg-slate-50 flex justify-between items-center hover:bg-slate-100 ${listaAbierta ? "border-b border-slate-200" : ""}`}
+                className="w-full p-4 bg-slate-50 flex justify-between items-center font-black text-slate-700 text-sm"
               >
-                <span className="font-black text-slate-700">
-                  Ver lista de {catalogoActivo.titulo} (
-                  {catalogoActivo.isCustom
-                    ? kitsList.length
-                    : itemsCatalogo.length}
-                  )
-                </span>
+                {catalogoActivo.titulo}{" "}
                 {listaAbierta ? (
-                  <ChevronUp size={20} className="text-slate-500" />
+                  <ChevronUp size={18} />
                 ) : (
-                  <ChevronDown size={20} className="text-slate-500" />
+                  <ChevronDown size={18} />
                 )}
               </button>
               {listaAbierta && (
-                <div className="p-4 overflow-y-auto max-h-[500px]">
-                  {cargandoCatalogos ? (
-                    <p className="text-center text-sm font-bold text-slate-400 py-8 animate-pulse">
-                      Cargando...
-                    </p>
-                  ) : catalogoActivo.isCustom ? (
-                    kitsList.length === 0 ? (
-                      <p className="text-center text-sm font-bold text-slate-400 py-8">
-                        No hay Kits armados aún.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {kitsList.map((kit) => (
-                          <div
-                            key={kit.id}
-                            className="p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-all"
-                          >
-                            <div className="flex justify-between items-start mb-3">
-                              <div className="flex items-center gap-3">
-                                {kit.qr_url ? (
-                                  <img
-                                    src={kit.qr_url}
-                                    alt="QR"
-                                    className="w-10 h-10 border border-slate-200 rounded-lg shadow-sm"
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                                    <Wrench
-                                      className="text-slate-300"
-                                      size={16}
-                                    />
-                                  </div>
-                                )}
-                                <div>
-                                  <p className="font-black text-slate-800 text-sm">
-                                    {kit.descripcion}
-                                  </p>
-                                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-100 inline-block px-2 py-0.5 rounded mt-1">
-                                    Armados en Stock:{" "}
-                                    <span className="text-blue-700">
-                                      {kit.cantidad}
-                                    </span>
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => iniciarEdicionKit(kit)}
-                                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
-                                >
-                                  <Edit2 size={16} />
-                                </button>
-                                <button
-                                  onClick={() => eliminarKit(kit)}
-                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            </div>
-                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-200 pb-1">
-                                Receta del Kit:
+                <div className="p-4 overflow-y-auto max-h-[450px] space-y-2">
+                  {catalogoActivo.isCustom
+                    ? kitsList.map((kit) => (
+                        <div
+                          key={kit.id}
+                          className="p-4 bg-slate-50/50 border border-slate-200 rounded-xl flex justify-between items-center group"
+                        >
+                          <div className="flex items-center gap-3">
+                            {kit.qr_url ? (
+                              <img
+                                src={kit.qr_url}
+                                className="w-10 h-10 rounded border bg-white"
+                              />
+                            ) : (
+                              <Wrench className="text-slate-400" size={18} />
+                            )}
+                            <div>
+                              <p className="font-bold text-sm text-slate-800">
+                                {kit.descripcion}
                               </p>
-                              <ul className="space-y-1">
-                                {kit.kit_componentes?.map((comp, idx) => (
-                                  <li
-                                    key={idx}
-                                    className="text-xs text-slate-600 flex justify-between font-medium"
-                                  >
-                                    <span>
-                                      • {comp.inventario?.descripcion} (Mod:{" "}
-                                      {comp.inventario?.modelo || "N/A"})
-                                    </span>
-                                    <span className="font-black text-slate-800">
-                                      x{comp.cantidad_necesaria}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
+                              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                                En Stock: {kit.cantidad}
+                              </p>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )
-                  ) : itemsCatalogo.length === 0 ? (
-                    <p className="text-center text-sm font-bold text-slate-400 py-8">
-                      No hay registros aún.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {itemsCatalogo.map((item) => (
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => {
+                                setFormKit({
+                                  descripcion: kit.descripcion,
+                                  componentes: kit.kit_componentes,
+                                });
+                                setEditandoCatId(kit.id);
+                                setListaAbierta(false);
+                              }}
+                              className="p-2 text-slate-400 hover:text-blue-600"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => eliminarKit(kit)}
+                              className="p-2 text-slate-400 hover:text-red-500"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    : itemsCatalogo.map((item) => (
                         <div
                           key={item.id}
-                          className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-slate-300 hover:shadow-sm group"
+                          className="p-3 bg-white border border-slate-100 rounded-xl flex justify-between items-center group hover:border-slate-300"
                         >
-                          <div>
-                            <p className="font-bold text-sm text-slate-800">
-                              {item.nombre}
-                            </p>
-                          </div>
-                          <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="font-bold text-sm text-slate-800">
+                            {item.nombre}
+                          </span>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
-                              onClick={() => iniciarEdicionCatalogo(item)}
-                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                              onClick={() => {
+                                setFormCatalogo({
+                                  nombre: item.nombre,
+                                  enlace: item.enlace || "",
+                                });
+                                setEditandoCatId(item.id);
+                                setListaAbierta(false);
+                              }}
+                              className="p-2 text-slate-400 hover:text-blue-600"
                             >
                               <Edit2 size={16} />
                             </button>
                             <button
                               onClick={() => eliminarCatalogo(item.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                              className="p-2 text-slate-400 hover:text-red-500"
                             >
                               <Trash2 size={16} />
                             </button>
                           </div>
                         </div>
                       ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* SECCIÓN PERFIL Y CONTRASEÑA */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <h2 className="text-lg font-black text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+            <User size={20} className="text-blue-700" /> Mi Perfil
+          </h2>
+          <form onSubmit={handleChangeName} className="space-y-4 mt-4">
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                Nombre Completo
+              </label>
+              <input
+                type="text"
+                required
+                value={currentName}
+                onChange={(e) => setCurrentName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl font-bold text-slate-800"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isNameLoading}
+              className="w-full py-3 bg-blue-700 text-white rounded-xl font-bold text-xs uppercase shadow-md active:scale-95 disabled:opacity-50"
+            >
+              {isNameLoading ? "Guardando..." : "Guardar Nombre"}
+            </button>
+          </form>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <h2 className="text-lg font-black text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+            <KeyRound size={20} className="text-blue-700" /> Seguridad
+          </h2>
+          <form onSubmit={handleChangePassword} className="space-y-4 mt-4">
+            <div className="relative">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                Nueva Contraseña
+              </label>
+              <input
+                type={showNewPassword ? "text" : "password"}
+                minLength={6}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl font-bold"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-4 bottom-3.5 text-slate-400"
+              >
+                {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <button
+              type="submit"
+              disabled={isPasswordLoading || !newPassword}
+              className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold text-xs uppercase shadow-md active:scale-95 disabled:opacity-50"
+            >
+              Actualizar Contraseña
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* SECCIÓN ADMIN: FIRMA Y BACKUP */}
+      {userRole === "admin" && (
+        <>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <h2 className="text-lg font-black text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+              <PenTool size={20} className="text-blue-700" /> Firma de Correo
+              Corporativa
+            </h2>
+            <div className="space-y-4 mt-4">
+              <ReactQuill
+                theme="snow"
+                value={firma}
+                onChange={setFirma}
+                className="bg-white rounded-xl text-slate-800"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleGuardarFirma}
+                  disabled={isFirmaLoading}
+                  className="py-3 px-8 bg-blue-700 text-white font-black rounded-xl text-xs uppercase shadow-lg shadow-blue-700/20"
+                >
+                  {isFirmaLoading ? "Guardando..." : "Guardar Firma"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 p-6 rounded-2xl shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="bg-blue-900/50 p-3 rounded-xl">
+                <Database size={24} className="text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">
+                  Respaldo Maestro
+                </h3>
+                <p className="text-xs text-slate-400 font-medium">
+                  Descarga un archivo JSON con toda la base de datos de MILAS
+                  (Inventario, Tareas, Auditoría).
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleDescargarRespaldo}
+              disabled={isBackupLoading}
+              className="w-full md:w-auto bg-blue-600 text-white font-black py-3 px-8 rounded-xl hover:bg-blue-500 transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest disabled:opacity-50 active:scale-95"
+            >
+              {isBackupLoading ? (
+                <ServerCog className="animate-spin" size={16} />
+              ) : (
+                <DownloadCloud size={16} />
+              )}
+              {isBackupLoading ? "Procesando..." : "Descargar Respaldo JSON"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
