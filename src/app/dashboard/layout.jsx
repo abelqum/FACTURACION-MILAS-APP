@@ -93,6 +93,12 @@ export default function DashboardLayout({ children }) {
       roles: ["admin", "empleado"],
     },
     {
+      name: "Movimientos",
+      href: "/dashboard/movimientos",
+      icon: "📅",
+      roles: ["admin", "empleado"],
+    },
+    {
       name: "Facturas",
       href: "/dashboard/facturas",
       icon: "📄",
