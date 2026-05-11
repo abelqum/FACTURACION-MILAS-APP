@@ -180,7 +180,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, descripcion: e.target.value })
                 }
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
               />
             </div>
             <div>
@@ -191,7 +191,7 @@ export default function ModalFormProducto({
                 type="text"
                 value={form.modelo}
                 onChange={(e) => setForm({ ...form, modelo: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-800 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-800 p-3 rounded-xl text-sm font-bold"
               />
             </div>
 
@@ -205,11 +205,11 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, id_categoria: e.target.value })
                 }
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.categorias?.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={c.id} className="text-slate-800">
                     {c.nombre}
                   </option>
                 ))}
@@ -223,11 +223,11 @@ export default function ModalFormProducto({
                 required
                 value={form.id_marca}
                 onChange={(e) => setForm({ ...form, id_marca: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.marcas?.map((m) => (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.id} value={m.id} className="text-slate-800">
                     {m.nombre}
                   </option>
                 ))}
@@ -241,11 +241,11 @@ export default function ModalFormProducto({
                 required
                 value={form.id_udm}
                 onChange={(e) => setForm({ ...form, id_udm: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.udms?.map((u) => (
-                  <option key={u.id} value={u.id}>
+                  <option key={u.id} value={u.id} className="text-slate-800">
                     {u.nombre}
                   </option>
                 ))}
@@ -263,11 +263,11 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, id_proveedor: e.target.value })
                 }
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold"
               >
                 <option value="">Selecciona el Proveedor...</option>
                 {catalogos.proveedores?.map((p) => (
-                  <option key={p.id} value={p.id}>
+                  <option key={p.id} value={p.id} className="text-slate-800">
                     {p.nombre}
                   </option>
                 ))}
@@ -286,7 +286,7 @@ export default function ModalFormProducto({
                   type="url"
                   value={form.enlace}
                   onChange={(e) => setForm({ ...form, enlace: e.target.value })}
-                  className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"
+                  className="text-slate-800 w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"
                   placeholder="https://..."
                 />
               </div>
@@ -302,7 +302,7 @@ export default function ModalFormProducto({
                     setAplicaMedida(e.target.checked);
                     if (!e.target.checked) setForm({ ...form, id_medida: "" });
                   }}
-                  className="w-4 h-4 accent-blue-600 rounded"
+                  className="w-4 h-4 text-slate-800 accent-blue-600 rounded"
                 />
                 <span className="text-[10px] font-black text-blue-900 uppercase tracking-widest">
                   Lleva Medida
@@ -315,11 +315,11 @@ export default function ModalFormProducto({
                   onChange={(e) =>
                     setForm({ ...form, id_medida: e.target.value })
                   }
-                  className="w-full bg-white border border-blue-200 p-2 rounded-lg text-sm font-bold shadow-sm"
+                  className="w-full text-slate-800 bg-white border border-blue-200 p-2 rounded-lg text-sm font-bold shadow-sm"
                 >
                   <option value="">Pulgadas...</option>
                   {catalogos.medidas?.map((m) => (
-                    <option key={m.id} value={m.id}>
+                    <option key={m.id} value={m.id} className="text-slate-800">
                       {m.nombre}
                     </option>
                   ))}
@@ -337,11 +337,11 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, id_almacen: e.target.value })
                 }
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.almacenes?.map((a) => (
-                  <option key={a.id} value={a.id}>
+                  <option key={a.id} value={a.id} className="text-slate-800">
                     {a.nombre}
                   </option>
                 ))}
@@ -355,7 +355,7 @@ export default function ModalFormProducto({
                 type="text"
                 value={form.fila}
                 onChange={(e) => setForm({ ...form, fila: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold"
               />
             </div>
 
@@ -371,7 +371,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, precio_unitario: e.target.value })
                 }
-                className="w-full bg-emerald-50/50 border border-emerald-200 p-3 rounded-xl text-sm font-black"
+                className="w-full bg-emerald-50/50 border text-slate-800 border-emerald-200 p-3 rounded-xl text-sm font-black"
               />
             </div>
             <div>
@@ -383,7 +383,7 @@ export default function ModalFormProducto({
                 type="number"
                 value={form.cantidad}
                 onChange={(e) => setForm({ ...form, cantidad: e.target.value })}
-                className="w-full bg-blue-50/50 border border-blue-200 p-3 rounded-xl text-sm font-black"
+                className="w-full bg-blue-50/50 border text-slate-800 border-blue-200 p-3 rounded-xl text-sm font-black"
               />
             </div>
             <div>
@@ -397,7 +397,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, stock_minimo: e.target.value })
                 }
-                className="w-full bg-red-50 border border-red-200 p-3 rounded-xl text-sm font-black"
+                className="w-full text-slate-800 bg-red-50 border border-red-200 p-3 rounded-xl text-sm font-black"
               />
             </div>
           </div>
