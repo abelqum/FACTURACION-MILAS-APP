@@ -78,15 +78,28 @@ export default function ModalFormProducto({
     e.preventDefault();
     setCargando(true);
     try {
-      const payload = {
-        ...form,
-        id_medida: aplicaMedida ? form.id_medida : null,
-      };
+      // 🟢 1. EL FILTRO LIMPIADOR
+      // Convertimos todos los textos vacíos ("") a nulos (null)
+      // para que PostgreSQL no marque el error de "invalid input syntax"
+      const payloadLimpio = {};
+      for (const key in form) {
+        if (form[key] === "") {
+          payloadLimpio[key] = null;
+        } else {
+          payloadLimpio[key] = form[key];
+        }
+      }
+
+      // 2. Regla especial para la medida
+      if (!aplicaMedida) {
+        payloadLimpio.id_medida = null;
+      }
 
       if (productoEdicion) {
+        // ACTUALIZAR
         const { error } = await supabase
           .from("inventario")
-          .update(payload)
+          .update(payloadLimpio)
           .eq("id", productoEdicion.id);
         if (error) throw error;
         Swal.fire({
@@ -98,13 +111,15 @@ export default function ModalFormProducto({
           showConfirmButton: false,
         });
       } else {
+        // CREAR NUEVO
         const { data: nuevo, error } = await supabase
           .from("inventario")
-          .insert([payload])
+          .insert([payloadLimpio])
           .select()
           .single();
         if (error) throw error;
 
+        // Generar QR
         const qrDataUrl = await QRCode.toDataURL(nuevo.id, { width: 300 });
         let arr = qrDataUrl.split(","),
           bstr = atob(arr[1]),
