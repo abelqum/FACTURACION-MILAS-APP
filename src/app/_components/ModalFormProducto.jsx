@@ -170,7 +170,7 @@ export default function ModalFormProducto({
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="md:col-span-2">
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Descripción *
               </label>
               <input
@@ -184,19 +184,19 @@ export default function ModalFormProducto({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Modelo
               </label>
               <input
                 type="text"
                 value={form.modelo}
                 onChange={(e) => setForm({ ...form, modelo: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full bg-slate-50 border border-slate-800 p-3 rounded-xl text-sm font-bold"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Categoría *
               </label>
               <select
@@ -216,7 +216,7 @@ export default function ModalFormProducto({
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Marca *
               </label>
               <select
@@ -234,7 +234,7 @@ export default function ModalFormProducto({
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Unidad de Medida *
               </label>
               <select
@@ -254,7 +254,7 @@ export default function ModalFormProducto({
 
             {/* 🟢 PROVEEDOR OBLIGATORIO Y ENLACE */}
             <div className="md:col-span-1">
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Proveedor *
               </label>
               <select
@@ -274,12 +274,12 @@ export default function ModalFormProducto({
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Enlace (Maps / Mercado Libre)
               </label>
               <div className="relative">
                 <LinkIcon
-                  className="absolute left-3 top-3.5 text-slate-400"
+                  className="absolute left-3 top-3.5 text-slate-800"
                   size={16}
                 />
                 <input
@@ -328,7 +328,7 @@ export default function ModalFormProducto({
             </div>
 
             <div>
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Almacén *
               </label>
               <select
@@ -348,7 +348,7 @@ export default function ModalFormProducto({
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Fila / Ubicación
               </label>
               <input
@@ -360,7 +360,7 @@ export default function ModalFormProducto({
             </div>
 
             <div>
-              <label className="block text-[11px] font-black text-emerald-600 uppercase tracking-widest mb-1.5">
+              <label className="block text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-1.5">
                 Costo Unitario *
               </label>
               <input
@@ -406,7 +406,7 @@ export default function ModalFormProducto({
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-widest"
+              className="px-6 py-3 bg-slate-100 text-slate-800 font-bold rounded-xl text-xs uppercase tracking-widest"
             >
               Cancelar
             </button>
