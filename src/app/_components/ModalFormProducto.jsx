@@ -264,7 +264,7 @@ export default function ModalFormProducto({
             </div>
 
             {/* 🟢 SECCIÓN DE MEDIDA MEJORADA: Fija y con estado visual bloqueado */}
-            <div className="md:col-span-3 bg-blue-50/50 p-3 border border-blue-100 rounded-xl flex items-center gap-4 transition-all">
+            <div className="md:col-span-3  bg-blue-50/50 p-3 border border-blue-100 rounded-xl flex flex-col items-center justify-center gap-4 transition-all">
               <label className="flex items-center gap-2 cursor-pointer shrink-0">
                 <input
                   type="checkbox"
