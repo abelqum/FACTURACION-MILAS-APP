@@ -42,6 +42,9 @@ const CATALOGOS = [
   { id: "inventario_udm", titulo: "Unidades de Medida", icono: "📏" },
   { id: "inventario_almacenes", titulo: "Almacenes / Estantes", icono: "🏢" },
   { id: "inventario_condiciones", titulo: "Condiciones", icono: "✨" },
+  // 🟢 SOLO AGREGA ESTA LÍNEA AQUÍ 👇
+  { id: "inventario_medidas", titulo: "Medidas (Pulgadas)", icono: "📐" },
+  // ------------------------------------
   { id: "kits", titulo: "Kits / Ensambles", icono: "🛠️", isCustom: true },
 ];
 
@@ -477,10 +480,10 @@ export default function ConfiguracionPage() {
                     setFormKit({ ...formKit, descripcion: e.target.value })
                   }
                   placeholder="Nombre del Kit..."
-                  className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold focus:border-blue-600"
+                  className="w-full bg-white border border-slate-800 p-3 rounded-xl text-sm font-bold focus:border-blue-600"
                 />
                 <div className="pt-4 space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
                     Componentes:
                   </p>
                   {formKit.componentes.map((comp, i) => (
@@ -517,7 +520,7 @@ export default function ConfiguracionPage() {
                             n[i].cantidad_necesaria = e.target.value;
                             setFormKit({ ...formKit, componentes: n });
                           }}
-                          className="w-full bg-slate-50 border-none p-1 text-xs font-black text-center"
+                          className="w-full bg-slate-50 border-none p-1 text-slate-800 text-xs font-black text-center"
                         />
                       </div>
                       <button
@@ -566,7 +569,7 @@ export default function ConfiguracionPage() {
                     setFormCatalogo({ ...formCatalogo, nombre: e.target.value })
                   }
                   placeholder="Nombre..."
-                  className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold"
+                  className="w-full bg-white border text-slate-800 border-slate-300 p-3 rounded-xl text-sm font-bold"
                 />
                 {catalogoActivo.extraField === "enlace" && (
                   <input
@@ -579,7 +582,7 @@ export default function ConfiguracionPage() {
                       })
                     }
                     placeholder="Enlace Maps/Tienda..."
-                    className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm"
+                    className="w-full bg-white border text-slate-800 border-slate-300 p-3 rounded-xl text-sm"
                   />
                 )}
                 <button
@@ -737,7 +740,7 @@ export default function ConfiguracionPage() {
                 minLength={6}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl font-bold"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-800 p-3 rounded-xl font-bold"
               />
               <button
                 type="button"

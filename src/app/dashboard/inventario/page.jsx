@@ -7,6 +7,7 @@ import {
   Plus,
   QrCode,
   Edit2,
+  Trash2,
   ScanLine,
   AlertTriangle,
   CheckCircle,
@@ -20,7 +21,7 @@ import {
   PackagePlus,
   PackageMinus,
   Wrench,
-} from "lucide-react";
+} from "lucide-react"; // 🟢 Asegurarse de tener Trash2 aquí
 
 import ModalAjusteStock from "@/app/_components/ModalAjusteStock";
 import ModalFormProducto from "@/app/_components/ModalFormProducto";
@@ -92,7 +93,6 @@ export default function InventarioPage() {
   };
 
   const cargarInventario = async () => {
-    // 🟢 AQUÍ ESTABA EL ERROR: Le quitamos la subconsulta de kits que confundía a Supabase
     const { data, error } = await supabase
       .from("inventario")
       .select(
@@ -105,17 +105,13 @@ export default function InventarioPage() {
       )
       .order("descripcion");
 
-    if (error) console.error("Error cargando inventario:", error);
     if (!error) setInventario(data || []);
     setCargando(false);
   };
 
   useEffect(() => {
-    const inicializarDatos = async () => {
-      await cargarCatalogos();
-      await cargarInventario();
-    };
-    inicializarDatos();
+    cargarCatalogos();
+    cargarInventario();
   }, []);
 
   const buscarYAbrirAjuste = (id) => {
@@ -143,7 +139,56 @@ export default function InventarioPage() {
     setPaginaActual(1);
   };
 
-  // 🟢 ARMAR KIT CORREGIDO (Consultas separadas para evitar errores)
+  // 🟢 FUNCIÓN SEGURA PARA ELIMINAR PRODUCTOS
+  const eliminarProducto = async (producto) => {
+    const confirm = await Swal.fire({
+      title: "¿Eliminar Producto?",
+      text: "Si este producto ya tiene un historial en Kárdex (entradas/salidas) o pertenece a un Kit, el sistema bloqueará su eliminación por seguridad financiera.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      confirmButtonText: "Sí, intentar borrar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (confirm.isConfirmed) {
+      setCargando(true);
+      try {
+        // 1. Borramos la imagen del QR del Bucket para no dejar basura
+        if (producto.qr_url) {
+          const fileName = `qr_${producto.id}.png`;
+          await supabase.storage.from("qr").remove([fileName]);
+        }
+
+        // 2. Intentamos borrar de la base de datos
+        const { error } = await supabase
+          .from("inventario")
+          .delete()
+          .eq("id", producto.id);
+
+        if (error) {
+          throw new Error(
+            "No se pudo eliminar el producto. Probablemente tiene movimientos de auditoría registrados o forma parte de un Kit. Para mantener la integridad financiera, no se permite su borrado.",
+          );
+        }
+
+        Swal.fire({
+          icon: "success",
+          title: "Eliminado",
+          toast: true,
+          position: "top-end",
+          timer: 2000,
+          showConfirmButton: false,
+        });
+        cargarInventario();
+      } catch (error) {
+        Swal.fire("No permitido", error.message, "error");
+      } finally {
+        setCargando(false);
+      }
+    }
+  };
+
   const armarKit = async (kit) => {
     Swal.fire({
       title: "Verificando stock...",
@@ -155,11 +200,9 @@ export default function InventarioPage() {
         .from("kit_componentes")
         .select("*")
         .eq("id_kit", kit.id);
-
       let faltantes = [];
       let detallesComponentes = [];
 
-      // Validamos el stock actual de cada pieza
       for (let comp of componentes) {
         const { data: prod } = await supabase
           .from("inventario")
@@ -174,14 +217,12 @@ export default function InventarioPage() {
         detallesComponentes.push({ ...comp, actualStock: prod.cantidad });
       }
 
-      if (faltantes.length > 0) {
+      if (faltantes.length > 0)
         return Swal.fire(
           "Stock Insuficiente",
-          "No puedes armar este kit. Te faltan las siguientes piezas:\n\n" +
-            faltantes.join("\n"),
+          "No puedes armar este kit. Faltan:\n\n" + faltantes.join("\n"),
           "error",
         );
-      }
 
       Swal.fire({
         title: "Armando Kit...",
@@ -189,7 +230,6 @@ export default function InventarioPage() {
         didOpen: () => Swal.showLoading(),
       });
 
-      // Descontamos piezas
       for (let comp of detallesComponentes) {
         const nuevoStock =
           Number(comp.actualStock) - Number(comp.cantidad_necesaria);
@@ -199,12 +239,10 @@ export default function InventarioPage() {
           .eq("id", comp.id_producto);
       }
 
-      // Sumamos al kit
       await supabase
         .from("inventario")
         .update({ cantidad: Number(kit.cantidad) + 1 })
         .eq("id", kit.id);
-
       cargarInventario();
       Swal.fire({
         icon: "success",
@@ -219,7 +257,6 @@ export default function InventarioPage() {
     }
   };
 
-  // 🟢 DESARMAR KIT CORREGIDO
   const desarmarKit = async (kit) => {
     if (Number(kit.cantidad) <= 0)
       return Swal.fire(
@@ -232,14 +269,12 @@ export default function InventarioPage() {
       allowOutsideClick: false,
       didOpen: () => Swal.showLoading(),
     });
-
     try {
       const { data: componentes } = await supabase
         .from("kit_componentes")
         .select("*")
         .eq("id_kit", kit.id);
 
-      // Devolvemos piezas
       for (let comp of componentes) {
         const { data: prod } = await supabase
           .from("inventario")
@@ -254,12 +289,10 @@ export default function InventarioPage() {
           .eq("id", comp.id_producto);
       }
 
-      // Restamos al kit
       await supabase
         .from("inventario")
         .update({ cantidad: Number(kit.cantidad) - 1 })
         .eq("id", kit.id);
-
       cargarInventario();
       Swal.fire({
         icon: "success",
@@ -275,7 +308,6 @@ export default function InventarioPage() {
   };
 
   const generarCatalogoPDF = async () => {
-    // ... [Tu código original de PDF que funciona perfecto] ...
     if (inventarioFiltrado.length === 0)
       return Swal.fire("Atención", "No hay productos en la lista.", "warning");
     Swal.fire({
@@ -291,8 +323,8 @@ export default function InventarioPage() {
         format: "a4",
       });
       const pageWidth = doc.internal.pageSize.getWidth();
-      const convertirImagenABase64 = (url) => {
-        return new Promise((resolve) => {
+      const convertirImagenABase64 = (url) =>
+        new Promise((resolve) => {
           if (!url) return resolve(null);
           const img = new Image();
           img.crossOrigin = "Anonymous";
@@ -310,7 +342,7 @@ export default function InventarioPage() {
           img.onerror = () => resolve(null);
           img.src = url;
         });
-      };
+
       const imagenesQR = await Promise.all(
         inventarioFiltrado.map((p) => convertirImagenABase64(p.qr_url)),
       );
@@ -366,6 +398,7 @@ export default function InventarioPage() {
         doc.text(`Modelo: ${producto.modelo || "N/A"}`, x + 3, y + 18);
         doc.text(`Marca: ${producto.marca?.nombre || "N/A"}`, x + 3, y + 23);
         doc.text(`Cantidad: ${producto.cantidad}`, x + 3, y + 28);
+
         const qrBase64 = imagenesQR[i];
         if (qrBase64) {
           try {
@@ -658,33 +691,44 @@ export default function InventarioPage() {
                         )}
                       </td>
                       <td className="p-4 text-center">
+                        {/* 🟢 SE AGREGÓ EL BOTÓN DE BORRAR PARA PRODUCTOS NORMALES */}
                         {p.es_kit ? (
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => armarKit(p)}
-                              className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors font-bold text-[10px] uppercase flex items-center gap-1"
+                              className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors"
                               title="Armar Kit"
                             >
                               <PackagePlus size={16} />
                             </button>
                             <button
                               onClick={() => desarmarKit(p)}
-                              className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg transition-colors font-bold text-[10px] uppercase flex items-center gap-1"
+                              className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg transition-colors"
                               title="Desarmar Kit"
                             >
                               <PackageMinus size={16} />
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setProductoToEdit(p);
-                              setIsModalAddOpen(true);
-                            }}
-                            className="p-2 bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 rounded-lg transition-colors font-bold text-[10px] uppercase flex items-center gap-1 mx-auto"
-                          >
-                            <Edit2 size={14} /> Editar
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => {
+                                setProductoToEdit(p);
+                                setIsModalAddOpen(true);
+                              }}
+                              className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => eliminarProducto(p)}
+                              className="p-2 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg transition-colors"
+                              title="Borrar"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

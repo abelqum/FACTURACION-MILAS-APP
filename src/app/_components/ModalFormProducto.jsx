@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import Swal from "sweetalert2";
 import QRCode from "qrcode";
-import { X, Save, Edit3, Link as LinkIcon } from "lucide-react";
+import { X, Save, Edit3 } from "lucide-react";
 
 export default function ModalFormProducto({
   isOpen,
@@ -29,7 +29,6 @@ export default function ModalFormProducto({
     id_categoria: "",
     id_proveedor: "",
     id_medida: "",
-    enlace: "", // 🟢 Campo para el link de Maps o Mercado Libre
   });
 
   useEffect(() => {
@@ -49,7 +48,6 @@ export default function ModalFormProducto({
         id_categoria: productoEdicion.id_categoria || "",
         id_proveedor: productoEdicion.id_proveedor || "",
         id_medida: productoEdicion.id_medida || "",
-        enlace: productoEdicion.enlace || "",
       });
     } else {
       setAplicaMedida(false);
@@ -67,7 +65,6 @@ export default function ModalFormProducto({
         id_categoria: "",
         id_proveedor: "",
         id_medida: "",
-        enlace: "",
       });
     }
   }, [productoEdicion, isOpen]);
@@ -78,9 +75,6 @@ export default function ModalFormProducto({
     e.preventDefault();
     setCargando(true);
     try {
-      // 🟢 1. EL FILTRO LIMPIADOR
-      // Convertimos todos los textos vacíos ("") a nulos (null)
-      // para que PostgreSQL no marque el error de "invalid input syntax"
       const payloadLimpio = {};
       for (const key in form) {
         if (form[key] === "") {
@@ -90,13 +84,11 @@ export default function ModalFormProducto({
         }
       }
 
-      // 2. Regla especial para la medida
       if (!aplicaMedida) {
         payloadLimpio.id_medida = null;
       }
 
       if (productoEdicion) {
-        // ACTUALIZAR
         const { error } = await supabase
           .from("inventario")
           .update(payloadLimpio)
@@ -111,7 +103,6 @@ export default function ModalFormProducto({
           showConfirmButton: false,
         });
       } else {
-        // CREAR NUEVO
         const { data: nuevo, error } = await supabase
           .from("inventario")
           .insert([payloadLimpio])
@@ -119,7 +110,6 @@ export default function ModalFormProducto({
           .single();
         if (error) throw error;
 
-        // Generar QR
         const qrDataUrl = await QRCode.toDataURL(nuevo.id, { width: 300 });
         let arr = qrDataUrl.split(","),
           bstr = atob(arr[1]),
@@ -180,7 +170,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, descripcion: e.target.value })
                 }
-                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               />
             </div>
             <div>
@@ -191,7 +181,7 @@ export default function ModalFormProducto({
                 type="text"
                 value={form.modelo}
                 onChange={(e) => setForm({ ...form, modelo: e.target.value })}
-                className="w-full text-slate-800 bg-slate-50 border border-slate-800 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               />
             </div>
 
@@ -205,7 +195,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, id_categoria: e.target.value })
                 }
-                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.categorias?.map((c) => (
@@ -223,7 +213,7 @@ export default function ModalFormProducto({
                 required
                 value={form.id_marca}
                 onChange={(e) => setForm({ ...form, id_marca: e.target.value })}
-                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.marcas?.map((m) => (
@@ -241,7 +231,7 @@ export default function ModalFormProducto({
                 required
                 value={form.id_udm}
                 onChange={(e) => setForm({ ...form, id_udm: e.target.value })}
-                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.udms?.map((u) => (
@@ -252,8 +242,7 @@ export default function ModalFormProducto({
               </select>
             </div>
 
-            {/* 🟢 PROVEEDOR OBLIGATORIO Y ENLACE */}
-            <div className="md:col-span-1">
+            <div className="md:col-span-3">
               <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
                 Proveedor *
               </label>
@@ -263,7 +252,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, id_proveedor: e.target.value })
                 }
-                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona el Proveedor...</option>
                 {catalogos.proveedores?.map((p) => (
@@ -273,28 +262,10 @@ export default function ModalFormProducto({
                 ))}
               </select>
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
-                Enlace (Maps / Mercado Libre)
-              </label>
-              <div className="relative">
-                <LinkIcon
-                  className="absolute left-3 top-3.5 text-slate-800"
-                  size={16}
-                />
-                <input
-                  type="url"
-                  value={form.enlace}
-                  onChange={(e) => setForm({ ...form, enlace: e.target.value })}
-                  className="text-slate-800 w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium"
-                  placeholder="https://..."
-                />
-              </div>
-            </div>
 
-            {/* Medida Opcional */}
-            <div className="bg-blue-50/50 p-3 border border-blue-100 rounded-xl flex flex-col justify-center">
-              <label className="flex items-center gap-2 cursor-pointer mb-2">
+            {/* 🟢 SECCIÓN DE MEDIDA MEJORADA: Fija y con estado visual bloqueado */}
+            <div className="md:col-span-3 bg-blue-50/50 p-3 border border-blue-100 rounded-xl flex items-center gap-4 transition-all">
+              <label className="flex items-center gap-2 cursor-pointer shrink-0">
                 <input
                   type="checkbox"
                   checked={aplicaMedida}
@@ -302,29 +273,29 @@ export default function ModalFormProducto({
                     setAplicaMedida(e.target.checked);
                     if (!e.target.checked) setForm({ ...form, id_medida: "" });
                   }}
-                  className="w-4 h-4 text-slate-800 accent-blue-600 rounded"
+                  className="w-4 h-4 text-slate-800 accent-blue-600 rounded cursor-pointer"
                 />
                 <span className="text-[10px] font-black text-blue-900 uppercase tracking-widest">
                   Lleva Medida
                 </span>
               </label>
-              {aplicaMedida && (
-                <select
-                  required
-                  value={form.id_medida}
-                  onChange={(e) =>
-                    setForm({ ...form, id_medida: e.target.value })
-                  }
-                  className="w-full text-slate-800 bg-white border border-blue-200 p-2 rounded-lg text-sm font-bold shadow-sm"
-                >
-                  <option value="">Pulgadas...</option>
-                  {catalogos.medidas?.map((m) => (
-                    <option key={m.id} value={m.id} className="text-slate-800">
-                      {m.nombre}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <select
+                required={aplicaMedida}
+                disabled={!aplicaMedida}
+                value={form.id_medida}
+                onChange={(e) =>
+                  setForm({ ...form, id_medida: e.target.value })
+                }
+                className={`flex-1 text-slate-800 bg-white border border-blue-200 p-2 rounded-lg text-sm font-bold shadow-sm transition-all
+                  ${!aplicaMedida ? "opacity-30 bg-slate-100 border-slate-200 cursor-not-allowed" : "opacity-100 focus:outline-none focus:border-blue-600"}`}
+              >
+                <option value="">Seleccionar Pulgadas...</option>
+                {catalogos.medidas?.map((m) => (
+                  <option key={m.id} value={m.id} className="text-slate-800">
+                    {m.nombre}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -337,7 +308,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, id_almacen: e.target.value })
                 }
-                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.almacenes?.map((a) => (
@@ -355,7 +326,7 @@ export default function ModalFormProducto({
                 type="text"
                 value={form.fila}
                 onChange={(e) => setForm({ ...form, fila: e.target.value })}
-                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold"
+                className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               />
             </div>
 
@@ -371,7 +342,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, precio_unitario: e.target.value })
                 }
-                className="w-full bg-emerald-50/50 border text-slate-800 border-emerald-200 p-3 rounded-xl text-sm font-black"
+                className="w-full bg-emerald-50/50 border text-slate-800 border-emerald-200 p-3 rounded-xl text-sm font-black focus:outline-none focus:border-emerald-600 transition-all"
               />
             </div>
             <div>
@@ -383,7 +354,7 @@ export default function ModalFormProducto({
                 type="number"
                 value={form.cantidad}
                 onChange={(e) => setForm({ ...form, cantidad: e.target.value })}
-                className="w-full bg-blue-50/50 border text-slate-800 border-blue-200 p-3 rounded-xl text-sm font-black"
+                className="w-full bg-blue-50/50 border text-slate-800 border-blue-200 p-3 rounded-xl text-sm font-black focus:outline-none focus:border-blue-600 transition-all"
               />
             </div>
             <div>
@@ -397,7 +368,7 @@ export default function ModalFormProducto({
                 onChange={(e) =>
                   setForm({ ...form, stock_minimo: e.target.value })
                 }
-                className="w-full text-slate-800 bg-red-50 border border-red-200 p-3 rounded-xl text-sm font-black"
+                className="w-full text-slate-800 bg-red-50 border border-red-200 p-3 rounded-xl text-sm font-black focus:outline-none focus:border-red-600 transition-all"
               />
             </div>
           </div>
@@ -406,14 +377,14 @@ export default function ModalFormProducto({
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 bg-slate-100 text-slate-800 font-bold rounded-xl text-xs uppercase tracking-widest"
+              className="px-6 py-3 bg-slate-100 text-slate-800 font-bold rounded-xl text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={cargando}
-              className="px-8 py-3 bg-slate-800 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg disabled:opacity-50"
+              className="px-8 py-3 bg-slate-800 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg active:scale-95 disabled:opacity-50 transition-all"
             >
               {cargando ? "Guardando..." : "Guardar Producto"}
             </button>
