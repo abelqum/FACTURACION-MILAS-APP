@@ -98,16 +98,14 @@ export default function EnviarCorreoPage() {
 
       dataProspectos?.forEach((p) => {
         if (p.correos) {
-          p.correos
-            .split(",")
-            .forEach((correo) =>
-              listaContactos.push({
-                email: correo.trim(),
-                empresa: p.razon_social,
-                tipo: "Prospecto",
-                seleccionado: false,
-              }),
-            );
+          p.correos.split(",").forEach((correo) =>
+            listaContactos.push({
+              email: correo.trim(),
+              empresa: p.razon_social,
+              tipo: "Prospecto",
+              seleccionado: false,
+            }),
+          );
         }
       });
 
@@ -339,7 +337,7 @@ export default function EnviarCorreoPage() {
                   value={nuevoCorreoManual}
                   onChange={(e) => setNuevoCorreoManual(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && agregarCorreoManual()}
-                  className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-xs focus:border-blue-600 font-medium"
+                  className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-2 rounded-lg text-xs focus:border-blue-600 font-medium"
                 />
                 <button
                   onClick={agregarCorreoManual}
@@ -358,7 +356,7 @@ export default function EnviarCorreoPage() {
                   placeholder="Buscar empresa o correo..."
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:border-blue-600 font-medium"
+                  className="w-full pl-8 pr-3 py-2 text-slate-800 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:border-blue-600 font-medium"
                 />
               </div>
               <div className="flex justify-between items-center pt-1">
