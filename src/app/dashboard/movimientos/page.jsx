@@ -69,7 +69,8 @@ export default function MovimientosPage() {
           id, descripcion, modelo, cantidad, precio_unitario, es_kit,
           medida_cat:inventario_medidas(nombre),
           marca:inventario_marcas(nombre),
-          proveedor:inventario_proveedores(nombre)
+          proveedor:inventario_proveedores(nombre),
+          condicion:inventario_condiciones(nombre) 
         `,
         )
         .order("descripcion");

@@ -541,6 +541,7 @@ export default function InventarioPage() {
               <tr>
                 <th className="p-4">Producto / Kit</th>
                 <th className="p-4">Categoría</th>
+                <th className="p-4 text-center">Condición</th>
                 <th className="p-4">Proveedor</th>
                 <th className="p-4 text-center">Enlace</th>
                 <th className="p-4">Ubicación</th>
@@ -626,6 +627,17 @@ export default function InventarioPage() {
                         ) : (
                           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
                             Sin asignar
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-4 text-center">
+                        {p.condicion ? (
+                          <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-widest font-bold">
+                            {p.condicion.nombre}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+                            N/A
                           </span>
                         )}
                       </td>

@@ -263,14 +263,20 @@ export default function ModalMovimiento({
   };
 
   // 🟢 Generador Resistente de la Súper-Línea
+  // 🟢 Generador Resistente de la Súper-Línea
   const getSuperLinea = (p) => {
     if (!p) return "Producto no identificado";
     const partes = [];
     if (p.descripcion) partes.push(p.descripcion);
     if (p.modelo) partes.push(`Mod: ${p.modelo}`);
+
+    // 🟢 NUEVO: Agregamos la Condición a la Súper-Línea
+    if (p.condicion?.nombre) partes.push(`Cond: ${p.condicion.nombre}`);
+
     if (p.medida_cat?.nombre) partes.push(p.medida_cat.nombre);
     if (p.marca?.nombre) partes.push(`Marca: ${p.marca.nombre}`);
     if (p.proveedor?.nombre) partes.push(`Prov: ${p.proveedor.nombre}`);
+
     return partes.join(" | ");
   };
 

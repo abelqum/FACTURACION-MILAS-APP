@@ -352,7 +352,30 @@ export default function ModalFormProducto({
                 className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               />
             </div>
-
+            <div>
+              <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
+                Condición *
+              </label>
+              <select
+                required
+                value={form.id_condicion}
+                onChange={(e) =>
+                  setForm({ ...form, id_condicion: e.target.value })
+                }
+                className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
+              >
+                <option value="">Selecciona...</option>
+                {catalogos.condiciones?.map((cond) => (
+                  <option
+                    key={cond.id}
+                    value={cond.id}
+                    className="text-slate-800"
+                  >
+                    {cond.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-1.5">
                 Costo Unitario *
