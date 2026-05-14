@@ -206,21 +206,24 @@ export default function ModalMovimiento({
             subtotal: subtotalFila,
           },
         ]);
+        // ... dentro del bucle de detalles ...
 
-        const { data: prodData } = await supabase
+        // 1. Buscamos si la condición del producto permite actualizar precio
+        const { data: prodInfo } = await supabase
           .from("inventario")
-          .select("cantidad")
+          .select(
+            "id_condicion, inventario_condiciones(permite_actualizar_precio)",
+          )
           .eq("id", det.id_producto)
           .single();
-        const nuevaCantidad =
-          cabecera.tipo === "entrada"
-            ? Number(prodData.cantidad) + Number(det.cantidad)
-            : Number(prodData.cantidad) - Number(det.cantidad);
+
+        const puedeActualizarPrecio =
+          prodInfo?.inventario_condiciones?.permite_actualizar_precio;
 
         const updatePayload = { cantidad: nuevaCantidad };
 
-        // Actualizar Costo solo en Entradas
-        if (cabecera.tipo === "entrada") {
+        // Solo si es Entrada Y la condición lo permite, actualizamos el precio
+        if (cabecera.tipo === "entrada" && puedeActualizarPrecio) {
           if (cabecera.es_importacion) {
             const costoUnitarioUSD = Number(det.precio_unitario);
             const costoGastosUSD =
@@ -233,6 +236,11 @@ export default function ModalMovimiento({
           } else {
             updatePayload.precio_unitario = det.precio_unitario;
           }
+        } else if (cabecera.tipo === "entrada" && !puedeActualizarPrecio) {
+          // Si no puede actualizar, se queda el precio que ya tenía el catálogo
+          console.log(
+            "Este producto tiene una condición que no altera el precio de catálogo.",
+          );
         }
 
         await supabase

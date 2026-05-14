@@ -42,7 +42,12 @@ const CATALOGOS = [
   { id: "inventario_marcas", titulo: "Marcas", icono: "🏷️" },
   { id: "inventario_udm", titulo: "Unidades de Medida", icono: "📏" },
   { id: "inventario_almacenes", titulo: "Almacenes / Estantes", icono: "🏢" },
-  { id: "inventario_condiciones", titulo: "Condiciones", icono: "✨" },
+  {
+    id: "inventario_condiciones",
+    titulo: "Condiciones",
+    icono: "✨",
+    extraField: "bool",
+  },
   // 🟢 SOLO AGREGA ESTA LÍNEA AQUÍ 👇
   { id: "inventario_medidas", titulo: "Medidas (Pulgadas)", icono: "📐" },
   // ------------------------------------
@@ -129,9 +134,14 @@ export default function ConfiguracionPage() {
     e.preventDefault();
     if (!formCatalogo.nombre.trim()) return;
     try {
-      const payload = catalogoActivo.extraField
-        ? { nombre: formCatalogo.nombre, enlace: formCatalogo.enlace }
-        : { nombre: formCatalogo.nombre };
+      // 🟢 AQUÍ LE ENSEÑAMOS A GUARDAR EL TOGGLE (bool)
+      let payload = { nombre: formCatalogo.nombre };
+      if (catalogoActivo.extraField === "enlace")
+        payload.enlace = formCatalogo.enlace;
+      if (catalogoActivo.extraField === "bool")
+        payload.permite_actualizar_precio =
+          formCatalogo.permite_actualizar_precio || false;
+
       if (editandoCatId) {
         await supabase
           .from(catalogoActivo.id)
@@ -140,7 +150,11 @@ export default function ConfiguracionPage() {
       } else {
         await supabase.from(catalogoActivo.id).insert([payload]);
       }
-      setFormCatalogo({ nombre: "", enlace: "" });
+      setFormCatalogo({
+        nombre: "",
+        enlace: "",
+        permite_actualizar_precio: false,
+      });
       setEditandoCatId(null);
       cargarItemsCatalogo();
       Swal.fire({
@@ -155,7 +169,6 @@ export default function ConfiguracionPage() {
       Swal.fire("Error", "No se pudo procesar la solicitud.", "error");
     }
   };
-
   const eliminarCatalogo = async (id) => {
     const confirm = await Swal.fire({
       title: "¿Borrar ítem?",
@@ -570,8 +583,9 @@ export default function ConfiguracionPage() {
                     setFormCatalogo({ ...formCatalogo, nombre: e.target.value })
                   }
                   placeholder="Nombre..."
-                  className="w-full bg-white border text-slate-800 border-slate-300 p-3 rounded-xl text-sm font-bold"
+                  className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold"
                 />
+
                 {catalogoActivo.extraField === "enlace" && (
                   <input
                     type="url"
@@ -583,9 +597,36 @@ export default function ConfiguracionPage() {
                       })
                     }
                     placeholder="Enlace Maps/Tienda..."
-                    className="w-full bg-white border text-slate-800 border-slate-300 p-3 rounded-xl text-sm"
+                    className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm"
                   />
                 )}
+
+                {/* 🟢 AQUÍ PEGAS EL TOGGLE */}
+                {catalogoActivo.extraField === "bool" && (
+                  <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={
+                          formCatalogo.permite_actualizar_precio || false
+                        }
+                        onChange={(e) =>
+                          setFormCatalogo({
+                            ...formCatalogo,
+                            permite_actualizar_precio: e.target.checked,
+                          })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                      Permitir actualizar precio en movimientos
+                    </span>
+                  </div>
+                )}
+                {/* --------------------------- */}
+
                 <button
                   type="submit"
                   className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase hover:bg-slate-900 shadow-md"

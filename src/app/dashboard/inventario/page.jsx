@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import Swal from "sweetalert2";
+import QRCode from "qrcode";
 import { jsPDF } from "jspdf";
 import {
   Plus,
@@ -21,6 +22,7 @@ import {
   PackagePlus,
   PackageMinus,
   Wrench,
+  Copy,
 } from "lucide-react"; // 🟢 Asegurarse de tener Trash2 aquí
 
 import ModalAjusteStock from "@/app/_components/ModalAjusteStock";
@@ -60,6 +62,80 @@ export default function InventarioPage() {
   const [productoToEdit, setProductoToEdit] = useState(null);
   const [productoScanner, setProductoScanner] = useState(null);
 
+  const duplicarProducto = async (p) => {
+    const confirm = await Swal.fire({
+      title: "¿Duplicar producto?",
+      text: `Se creará una copia de: ${p.descripcion}`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sí, duplicar",
+    });
+
+    if (confirm.isConfirmed) {
+      setCargando(true);
+      try {
+        // 🟢 1. LIMPIEZA ABSOLUTA: Mandamos SOLO las columnas que existen en tu tabla
+        const nuevoProducto = {
+          descripcion: `${p.descripcion} (DUPLICADO)`,
+          modelo: p.modelo || null,
+          id_categoria: p.id_categoria || null,
+          id_marca: p.id_marca || null,
+          id_proveedor: p.id_proveedor || null,
+          id_almacen: p.id_almacen || null,
+          id_condicion: p.id_condicion || null,
+          id_udm: p.id_udm || null,
+          id_medida: p.id_medida || null,
+          fila: p.fila || null,
+          precio_unitario: p.precio_unitario || 0,
+          stock_minimo: p.stock_minimo || 1,
+          cantidad: 0, // Stock en 0 por seguridad
+          es_kit: p.es_kit || false,
+        };
+
+        // 2. Insertar en BD
+        const { data: nuevo, error } = await supabase
+          .from("inventario")
+          .insert([nuevoProducto])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // 3. Generar nuevo QR para el clon
+        const qrDataUrl = await QRCode.toDataURL(String(nuevo.id), {
+          width: 300,
+        });
+        const resBlob = await fetch(qrDataUrl);
+        const blob = await resBlob.blob();
+        const fileName = `qr_${nuevo.id}.png`;
+
+        await supabase.storage
+          .from("qr")
+          .upload(fileName, blob, { upsert: true });
+        const { data: urlData } = supabase.storage
+          .from("qr")
+          .getPublicUrl(fileName);
+
+        await supabase
+          .from("inventario")
+          .update({ qr_url: urlData.publicUrl })
+          .eq("id", nuevo.id);
+
+        Swal.fire(
+          "Copiado",
+          "Producto duplicado con éxito. Ahora puedes editar su condición.",
+          "success",
+        );
+
+        // Refrescar la tabla (Asegúrate de que esta sea tu función para recargar la tabla)
+        cargarInventario();
+      } catch (error) {
+        Swal.fire("Error", error.message, "error");
+      } finally {
+        setCargando(false);
+      }
+    }
+  };
   const cargarCatalogos = async () => {
     const { data: udms } = await supabase.from("inventario_udm").select("*");
     const { data: marcas } = await supabase
@@ -739,6 +815,13 @@ export default function InventarioPage() {
                               title="Borrar"
                             >
                               <Trash2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => duplicarProducto(p)}
+                              className="p-2 bg-slate-50 text-slate-500 hover:bg-slate-200 rounded-lg"
+                              title="Duplicar"
+                            >
+                              <Copy size={16} />
                             </button>
                           </div>
                         )}
