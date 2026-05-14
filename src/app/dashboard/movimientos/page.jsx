@@ -1,553 +1,566 @@
 "use client";
-
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import Swal from "sweetalert2";
 import { jsPDF } from "jspdf";
-
 import {
-  FileSpreadsheet,
-  Plus,
-  Filter,
-  Trash2,
   FileText,
-  Globe,
+  Plus,
+  Trash2,
+  Edit2,
+  ChevronDown,
+  ChevronUp,
+  Package,
   ArrowDownRight,
   ArrowUpRight,
-  Edit2,
+  Globe,
+  MapPin,
+  Calculator,
+  Calendar,
+  Search,
 } from "lucide-react";
 
 import ModalMovimiento from "@/app/_components/ModalMovimiento";
 
-const NOMBRES_MESES = [
-  "Enero",
-  "Febrero",
-  "Marzo",
-  "Abril",
-  "Mayo",
-  "Junio",
-  "Julio",
-  "Agosto",
-  "Septiembre",
-  "Octubre",
-  "Noviembre",
-  "Diciembre",
-];
-
 export default function MovimientosPage() {
   const [movimientos, setMovimientos] = useState([]);
-  const [inventario, setInventario] = useState([]);
+  const [productos, setProductos] = useState([]);
   const [cargando, setCargando] = useState(true);
 
+  // 🟢 ESTADOS DE FILTROS
+  const [filtroTipo, setFiltroTipo] = useState("todas"); // 'todas', 'nacional', 'importacion'
+  const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
+  const [anioFiltro, setAnioFiltro] = useState(new Date().getFullYear());
+
+  const [expandedRows, setExpandedRows] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [movimientoToEdit, setMovimientoToEdit] = useState(null);
+  const [movimientoAEditar, setMovimientoAEditar] = useState(null);
 
-  const fechaActual = new Date();
+  const [paginaActual, setPaginaActual] = useState(1);
+  const itemsPorPagina = 15;
 
-  const [filtros, setFiltros] = useState({
-    mes: (fechaActual.getMonth() + 1).toString(),
-    anio: fechaActual.getFullYear().toString(),
-    origen: "todos",
-  });
+  const meses = [
+    { v: 1, n: "Enero" },
+    { v: 2, n: "Febrero" },
+    { v: 3, n: "Marzo" },
+    { v: 4, n: "Abril" },
+    { v: 5, n: "Mayo" },
+    { v: 6, n: "Junio" },
+    { v: 7, n: "Julio" },
+    { v: 8, n: "Agosto" },
+    { v: 9, n: "Septiembre" },
+    { v: 10, n: "Octubre" },
+    { v: 11, n: "Noviembre" },
+    { v: 12, n: "Diciembre" },
+  ];
 
-  const fetchDatos = async () => {
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  const cargarDatos = async () => {
+    setCargando(true);
     try {
-      setCargando(true);
+      // 1. Cargar catálogo de productos completo para la Súper-Línea
+      const { data: prods } = await supabase
+        .from("inventario")
+        .select(
+          `
+          id, descripcion, modelo, cantidad, precio_unitario, es_kit,
+          medida_cat:inventario_medidas(nombre),
+          marca:inventario_marcas(nombre),
+          proveedor:inventario_proveedores(nombre)
+        `,
+        )
+        .order("descripcion");
+      setProductos(prods || []);
 
-      const [inventarioRes, movimientosRes] = await Promise.all([
-        supabase
-          .from("inventario")
-          .select("id, descripcion, modelo, cantidad")
-          .order("descripcion"),
+      // 2. Cargar Movimientos Maestros con sus Detalles
+      const { data: movs, error } = await supabase
+        .from("movimientos_cabecera")
+        .select(
+          `
+          *,
+          movimientos_detalles (
+            id, cantidad, precio_unitario, subtotal, id_producto,
+            inventario ( descripcion, modelo )
+          )
+        `,
+        )
+        .order("fecha", { ascending: false })
+        .order("created_at", { ascending: false });
 
-        supabase
-          .from("movimientos_inventario")
-          .select("*, producto:inventario(descripcion, modelo)")
-          .order("fecha", { ascending: false })
-          .order("created_at", { ascending: false }),
-      ]);
-
-      if (inventarioRes.data) setInventario(inventarioRes.data);
-
-      if (movimientosRes.data) setMovimientos(movimientosRes.data);
+      if (error) throw error;
+      setMovimientos(movs || []);
     } catch (error) {
       console.error(error);
-
       Swal.fire("Error", "No se pudieron cargar los movimientos.", "error");
     } finally {
       setCargando(false);
     }
   };
 
-  useEffect(() => {
-    fetchDatos();
-  }, []);
-
-  const cargarDatos = async () => {
-    await fetchDatos();
+  // 🟢 MANEJO DE ACORDEÓN (EXPANDIR FILAS)
+  const toggleRow = (id) => {
+    setExpandedRows((prev) =>
+      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id],
+    );
   };
 
-  const eliminarMovimiento = async (id) => {
+  // 🟢 BORRADO SEGURO CON MATEMÁTICA INVERSA
+  const eliminarMovimiento = async (mov) => {
     const confirm = await Swal.fire({
-      title: "¿Borrar este registro?",
-      text: "Esto solo borrará el registro de auditoría, NO afectará tu inventario real.",
+      title: "¿Eliminar Factura?",
+      text: "Esto revertirá el stock de todos los productos involucrados en esta operación.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
-      confirmButtonText: "Sí, borrar",
+      confirmButtonText: "Sí, revertir y borrar",
     });
 
     if (confirm.isConfirmed) {
+      setCargando(true);
       try {
-        await supabase.from("movimientos_inventario").delete().eq("id", id);
+        // Revertir inventario
+        for (let det of mov.movimientos_detalles) {
+          const { data: prod } = await supabase
+            .from("inventario")
+            .select("cantidad")
+            .eq("id", det.id_producto)
+            .single();
+          const revertAmount =
+            mov.tipo === "entrada"
+              ? -Number(det.cantidad)
+              : Number(det.cantidad);
+          await supabase
+            .from("inventario")
+            .update({ cantidad: Number(prod.cantidad) + revertAmount })
+            .eq("id", det.id_producto);
+        }
 
-        await cargarDatos();
+        // Borrar cabecera
+        await supabase.from("movimientos_cabecera").delete().eq("id", mov.id);
 
         Swal.fire({
           icon: "success",
-          title: "Borrado",
+          title: "Eliminado",
           toast: true,
           position: "top-end",
-          timer: 1500,
+          timer: 2500,
           showConfirmButton: false,
         });
+        cargarDatos();
       } catch (error) {
-        console.error(error);
-
-        Swal.fire("Error", "No se pudo eliminar.", "error");
+        Swal.fire("Error", "Fallo al eliminar: " + error.message, "error");
+      } finally {
+        setCargando(false);
       }
     }
   };
 
-  const movimientosFiltrados = movimientos.filter((m) => {
-    if (!m.fecha) return false;
-
-    const [anioMov, mesMov] = m.fecha.split("-");
-
-    const matchMes = parseInt(mesMov).toString() === filtros.mes;
-
-    const matchAnio = anioMov === filtros.anio;
-
-    let matchOrigen = true;
-
-    if (filtros.origen === "nacional") {
-      matchOrigen = m.es_importacion === false;
-    }
-
-    if (filtros.origen === "importacion") {
-      matchOrigen = m.es_importacion === true;
-    }
-
-    return matchMes && matchAnio && matchOrigen;
-  });
-
-  const totalSubtotal = movimientosFiltrados.reduce(
-    (acc, m) => acc + Number(m.subtotal || 0),
-    0,
-  );
-
-  const totalIVA = movimientosFiltrados.reduce(
-    (acc, m) => acc + Number(m.iva || 0),
-    0,
-  );
-
-  const totalGeneral = movimientosFiltrados.reduce(
-    (acc, m) => acc + Number(m.total || 0),
-    0,
-  );
-
-  const generarReportePDF = () => {
-    if (movimientosFiltrados.length === 0) {
-      return Swal.fire(
-        "Atención",
-        "No hay registros para exportar.",
-        "warning",
-      );
-    }
+  // 🟢 GENERACIÓN DE REPORTES PDF
+  const generarPDF = () => {
+    if (movimientosFiltrados.length === 0)
+      return Swal.fire("Atención", "No hay datos para imprimir.", "warning");
 
     const doc = new jsPDF({
-      orientation: "landscape",
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
     });
-
     const pageWidth = doc.internal.pageSize.getWidth();
-
-    const nombreMesActual = NOMBRES_MESES[parseInt(filtros.mes) - 1];
+    let currentY = 15;
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
-
-    doc.text("REPORTE DE ENTRADAS Y SALIDAS - MILAS", pageWidth / 2, 15, {
-      align: "center",
-    });
-
-    doc.setFontSize(10);
-
     doc.text(
-      `Periodo: ${nombreMesActual} del ${filtros.anio} | Origen: ${filtros.origen.toUpperCase()}`,
+      `REPORTE DE OPERACIONES - ${meses.find((m) => m.v === Number(mesFiltro))?.n} ${anioFiltro}`,
       pageWidth / 2,
-      22,
-      {
-        align: "center",
-      },
+      currentY,
+      { align: "center" },
     );
+    currentY += 10;
 
-    let y = 35;
-
-    // =========================
-    // HEADER TABLA PDF
-    // =========================
-
-    doc.setFillColor(240, 244, 248);
-
-    doc.rect(10, y - 5, pageWidth - 20, 8, "F");
-
-    doc.setFontSize(8);
-
-    doc.text("FECHA", 12, y);
-    doc.text("TIPO", 33, y);
-    doc.text("PRODUCTO", 52, y);
-    doc.text("CANT", 145, y);
-    doc.text("SUBTOTAL", 163, y);
-    doc.text("IVA", 192, y);
-    doc.text("TOTAL", 215, y);
-    doc.text("PEDIMENTO", 245, y);
-
-    y += 8;
-
-    doc.setFont("helvetica", "normal");
-
-    movimientosFiltrados.forEach((m) => {
-      if (y > 190) {
+    const printSection = (titulo, data) => {
+      if (data.length === 0) return;
+      if (currentY > 260) {
         doc.addPage();
-        y = 20;
+        currentY = 15;
       }
 
-      doc.text(m.fecha || "N/A", 12, y);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(29, 78, 216);
+      doc.text(titulo, 14, currentY);
+      currentY += 6;
+      doc.setTextColor(0, 0, 0);
 
-      doc.text((m.tipo || "").toUpperCase(), 33, y);
+      data.forEach((mov) => {
+        if (currentY > 270) {
+          doc.addPage();
+          currentY = 15;
+        }
 
-      // 🔥 MÁS REDUCIDO PARA QUE QUEPA PEDIMENTO
-      const desc = doc.splitTextToSize(m.producto?.descripcion || "N/A", 75);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        const tipoLabel = mov.tipo.toUpperCase();
+        const infoExtra = mov.es_importacion
+          ? ` | Pedimento: ${mov.numero_pedimento} | Gastos: ${mov.porcentaje_importacion}% | TC: $${mov.tipo_cambio}`
+          : ` | Nacional`;
+        doc.text(`${mov.fecha} - ${tipoLabel}${infoExtra}`, 14, currentY);
 
-      doc.text(desc, 52, y);
+        doc.setFont("helvetica", "normal");
+        const totalTxt = mov.es_importacion
+          ? `Total: $${mov.total_usd.toFixed(2)} USD / $${mov.total_mxn.toFixed(2)} MXN`
+          : `Total: $${mov.total_mxn.toFixed(2)} MXN`;
+        doc.text(totalTxt, pageWidth - 14, currentY, { align: "right" });
+        currentY += 5;
 
-      doc.text(String(m.cantidad || 0), 145, y);
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        mov.movimientos_detalles.forEach((det) => {
+          if (currentY > 280) {
+            doc.addPage();
+            currentY = 15;
+          }
+          const desc = `${det.cantidad}x ${det.inventario?.descripcion} (Mod: ${det.inventario?.modelo || "N/A"}) - $${det.precio_unitario} c/u`;
+          doc.text(`   • ${desc}`, 14, currentY);
+          currentY += 4;
+        });
 
-      doc.text(`$${Number(m.subtotal || 0).toFixed(2)}`, 163, y);
+        doc.setDrawColor(220);
+        doc.line(14, currentY, pageWidth - 14, currentY);
+        currentY += 6;
+        doc.setTextColor(0);
+      });
+      currentY += 5;
+    };
 
-      doc.text(`$${Number(m.iva || 0).toFixed(2)}`, 192, y);
+    if (filtroTipo === "todas" || filtroTipo === "importacion") {
+      const imports = movimientosFiltrados.filter((m) => m.es_importacion);
+      printSection("EQUIPOS DE IMPORTACIÓN", imports);
+    }
 
-      doc.text(`$${Number(m.total || 0).toFixed(2)}`, 215, y);
+    if (filtroTipo === "todas" || filtroTipo === "nacional") {
+      const nacionales = movimientosFiltrados.filter((m) => !m.es_importacion);
+      printSection("EQUIPOS NACIONALES", nacionales);
+    }
 
-      // 🔥 AHORA YA CABE PERFECTO EL PEDIMENTO DE 15 CARACTERES
-      doc.text(String(m.numero_pedimento || "N/A"), 245, y);
-
-      y += desc.length * 4 + 4;
-
-      doc.setDrawColor(200);
-
-      doc.line(10, y - 3, pageWidth - 10, y - 3);
-    });
-
-    // =========================
-    // TOTALES
-    // =========================
-
-    y += 6;
-
-    doc.setFont("helvetica", "bold");
-
-    doc.text("TOTALES DEL PERIODO:", 120, y);
-
-    doc.text(
-      `$${totalSubtotal.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-      })}`,
-      163,
-      y,
-    );
-
-    doc.text(
-      `$${totalIVA.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-      })}`,
-      192,
-      y,
-    );
-
-    doc.text(
-      `$${totalGeneral.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-      })}`,
-      215,
-      y,
-    );
-
-    doc.save(`Auditoria_MILAS_${filtros.anio}_${nombreMesActual}.pdf`);
+    doc.save(`Movimientos_MILAS_${anioFiltro}_${mesFiltro}.pdf`);
   };
 
+  // 🟢 FILTRADO DE TABLA (Por Mes, Año y Tipo)
+  const movimientosFiltrados = movimientos.filter((m) => {
+    const fechaMov = new Date(m.fecha + "T00:00:00");
+    const coincideMes = fechaMov.getMonth() + 1 === Number(mesFiltro);
+    const coincideAnio = fechaMov.getFullYear() === Number(anioFiltro);
+
+    let coincideTipo = true;
+    if (filtroTipo === "nacional") coincideTipo = !m.es_importacion;
+    if (filtroTipo === "importacion") coincideTipo = m.es_importacion;
+
+    return coincideMes && coincideAnio && coincideTipo;
+  });
+
+  const totalPaginas =
+    Math.ceil(movimientosFiltrados.length / itemsPorPagina) || 1;
+  const movsPaginados = movimientosFiltrados.slice(
+    (paginaActual - 1) * itemsPorPagina,
+    paginaActual * itemsPorPagina,
+  );
+
   return (
-    <div className="max-w-[90rem] mx-auto space-y-6">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 border-b border-slate-200 pb-6">
+    <div className="max-w-[90rem] mx-auto space-y-6 pb-12">
+      {/* HEADER PRINCIPAL */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-slate-200 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-            <FileSpreadsheet className="text-blue-700" />
-            Historial de Movimientos
+            <Calculator className="text-blue-700" /> Historial de Operaciones
           </h1>
-
           <p className="text-sm text-slate-500 mt-1 font-medium">
-            Auditoría financiera y control de entradas/salidas.
+            Gestión de entradas, salidas y facturación multilínea.
           </p>
         </div>
-
-        <div className="flex gap-2 w-full xl:w-auto shrink-0 flex-wrap">
+        <div className="flex gap-2 w-full sm:w-auto shrink-0 flex-wrap">
           <button
-            onClick={generarReportePDF}
-            className="flex-1 xl:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors shadow-sm"
+            onClick={generarPDF}
+            className=" sm:flex-none bg-slate-100 text-slate-700 px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors shadow-sm"
           >
-            <FileText size={16} />
-            Reporte PDF
+            <FileText size={16} /> PDF
           </button>
-
           <button
             onClick={() => {
-              setMovimientoToEdit(null);
+              setMovimientoAEditar(null);
               setIsModalOpen(true);
             }}
-            className="flex-1 xl:flex-none bg-blue-700 text-white px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-800 transition-colors shadow-md active:scale-95"
+            className=" sm:flex-none bg-blue-700 text-white px-5 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-800 transition-colors shadow-md active:scale-95"
           >
-            <Plus size={16} />
-            Registrar Movimiento
+            <Plus size={16} /> Nueva Operación
           </button>
         </div>
       </div>
 
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <div className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-widest mr-2">
-            <Filter size={16} />
-            Ver:
-          </div>
-
-          <select
-            value={filtros.mes}
-            onChange={(e) =>
-              setFiltros({
-                ...filtros,
-                mes: e.target.value,
-              })
-            }
-            className="bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-600"
+      {/* CONTROLES DE FILTRO */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex overflow-x-auto scrollbar-hide">
+          <button
+            onClick={() => {
+              setFiltroTipo("todas");
+              setPaginaActual(1);
+            }}
+            className={`px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap ${filtroTipo === "todas" ? "bg-slate-800 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}
           >
-            {NOMBRES_MESES.map((nombre, i) => (
-              <option key={i} value={(i + 1).toString()}>
-                {nombre}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filtros.anio}
-            onChange={(e) =>
-              setFiltros({
-                ...filtros,
-                anio: e.target.value,
-              })
-            }
-            className="bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-600"
+            Todos
+          </button>
+          <button
+            onClick={() => {
+              setFiltroTipo("nacional");
+              setPaginaActual(1);
+            }}
+            className={`px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${filtroTipo === "nacional" ? "bg-emerald-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}
           >
-            {[2024, 2025, 2026, 2027].map((a) => (
-              <option key={a} value={a.toString()}>
-                {a}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filtros.origen}
-            onChange={(e) =>
-              setFiltros({
-                ...filtros,
-                origen: e.target.value,
-              })
-            }
-            className="bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-600"
+            <MapPin size={14} /> Nacionales
+          </button>
+          <button
+            onClick={() => {
+              setFiltroTipo("importacion");
+              setPaginaActual(1);
+            }}
+            className={`px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${filtroTipo === "importacion" ? "bg-blue-600 text-white shadow-md" : "text-slate-500 hover:bg-slate-100"}`}
           >
-            <option value="todos">Nacional e Importación</option>
-
-            <option value="nacional">Solo Nacional</option>
-
-            <option value="importacion">Solo Importación</option>
-          </select>
+            <Globe size={14} /> Importaciones
+          </button>
         </div>
 
-        <div className="flex gap-6 w-full md:w-auto justify-between md:justify-end text-right">
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              IVA del Mes
-            </p>
-
-            <p className="text-lg font-black text-red-400">
-              $
-              {totalIVA.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-              })}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
-              Total del Mes
-            </p>
-
-            <p className="text-2xl font-black text-emerald-800 leading-none">
-              $
-              {totalGeneral.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-              })}
-            </p>
-          </div>
+        <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex gap-2">
+          <select
+            value={mesFiltro}
+            onChange={(e) => {
+              setMesFiltro(e.target.value);
+              setPaginaActual(1);
+            }}
+            className="flex-1 bg-slate-50 border-none rounded-xl text-xs font-black uppercase tracking-widest p-2.5 outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
+          >
+            {meses.map((m) => (
+              <option key={m.v} value={m.v}>
+                {m.n}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            value={anioFiltro}
+            onChange={(e) => {
+              setAnioFiltro(e.target.value);
+              setPaginaActual(1);
+            }}
+            className="w-24 bg-slate-50 border-none rounded-xl text-xs font-black p-2.5 outline-none focus:ring-2 focus:ring-blue-600 text-center"
+          />
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* TABLA PRINCIPAL EXPANDIBLE */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[60vh]">
+        <div className="overflow-x-auto flex-1">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
               <tr>
-                <th className="p-4">Fecha</th>
-                <th className="p-4">Tipo</th>
-                <th className="p-4">Producto</th>
-                <th className="p-4 text-center">Cant.</th>
-                <th className="p-4 text-right">Finanzas</th>
-                <th className="p-4 text-center">Origen</th>
+                <th className="p-4 w-10 text-center">Detalle</th>
+                <th className="p-4">Fecha / Tipo</th>
+                <th className="p-4">Origen</th>
+                <th className="p-4">Artículos</th>
+                <th className="p-4 text-right">Totales (MXN)</th>
                 <th className="p-4 text-center">Acciones</th>
               </tr>
             </thead>
-
             <tbody className="divide-y divide-slate-100">
               {cargando ? (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="6"
                     className="p-12 text-center text-slate-400 font-bold animate-pulse"
                   >
-                    Cargando registros...
-                  </td>
-                </tr>
-              ) : movimientosFiltrados.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan="7"
-                    className="p-12 text-center text-slate-400 font-bold"
-                  >
-                    No hay registros en este periodo.
+                    Cargando operaciones...
                   </td>
                 </tr>
               ) : (
-                movimientosFiltrados.map((m) => (
-                  <tr
-                    key={m.id}
-                    className="hover:bg-slate-50 transition-colors"
-                  >
-                    <td className="p-4 font-bold text-slate-700 text-xs">
-                      {m.fecha}
-                    </td>
-
-                    <td className="p-4">
-                      {m.tipo === "entrada" ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-1 bg-emerald-100 text-emerald-700 rounded uppercase tracking-widest">
-                          <ArrowDownRight size={12} />
-                          Entrada
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-1 bg-orange-100 text-orange-700 rounded uppercase tracking-widest">
-                          <ArrowUpRight size={12} />
-                          Salida
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="p-4">
-                      <p className="font-bold text-slate-800 whitespace-normal min-w-[200px] leading-tight">
-                        {m.producto?.descripcion}
-                      </p>
-
-                      <p className="text-[10px] text-slate-500 mt-0.5">
-                        Mod: {m.producto?.modelo || "N/A"}
-                      </p>
-                    </td>
-
-                    <td className="p-4 text-center font-black text-blue-700 text-base">
-                      {m.cantidad}
-                    </td>
-
-                    <td className="p-4 text-right">
-                      <div className="flex flex-col items-end">
-                        <span className="text-[10px] font-bold text-slate-400">
-                          Sub: $
-                          {Number(m.subtotal).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </span>
-
-                        <span className="text-xs font-black text-emerald-700">
-                          Tot: $
-                          {Number(m.total).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="p-4 text-center">
-                      {m.es_importacion ? (
-                        <div className="flex flex-col items-center gap-1">
-                          <Globe size={16} className="text-indigo-600" />
-
-                          <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                            {m.numero_pedimento}
+                movsPaginados.map((mov) => {
+                  const isExpanded = expandedRows.includes(mov.id);
+                  const isEntrada = mov.tipo === "entrada";
+                  return (
+                    <React.Fragment key={mov.id}>
+                      {/* FILA CABECERA */}
+                      <tr
+                        className={`transition-colors hover:bg-slate-50 ${isExpanded ? "bg-blue-50/30" : ""}`}
+                      >
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => toggleRow(mov.id)}
+                            className="p-1.5 bg-slate-100 text-slate-500 rounded hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp size={16} />
+                            ) : (
+                              <ChevronDown size={16} />
+                            )}
+                          </button>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`p-2 rounded-lg ${isEntrada ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600"}`}
+                            >
+                              {isEntrada ? (
+                                <ArrowDownRight size={18} />
+                              ) : (
+                                <ArrowUpRight size={18} />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-black text-slate-800 uppercase tracking-widest text-xs">
+                                {mov.tipo}
+                              </p>
+                              <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Calendar size={10} /> {mov.fecha}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          {mov.es_importacion ? (
+                            <div>
+                              <span className="bg-blue-100 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 w-fit">
+                                <Globe size={10} /> Importación
+                              </span>
+                              <p className="text-[10px] font-bold text-slate-500 mt-1">
+                                Pedimento:{" "}
+                                <span className="text-slate-800">
+                                  {mov.numero_pedimento}
+                                </span>
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 w-fit">
+                              <MapPin size={10} /> Nacional
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <span className="bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-black px-2 py-1 rounded-full">
+                            {mov.movimientos_detalles?.length || 0} Partidas
                           </span>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                          Nacional
-                        </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <p className="text-lg font-black text-slate-800">
+                            $
+                            {mov.total_mxn.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </p>
+                          {mov.es_importacion && (
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                              USD $
+                              {mov.total_usd.toLocaleString("en-US", {
+                                minimumFractionDigits: 2,
+                              })}{" "}
+                              • TC: ${mov.tipo_cambio}
+                            </p>
+                          )}
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => {
+                                setMovimientoAEditar(mov);
+                                setIsModalOpen(true);
+                              }}
+                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => eliminarMovimiento(mov)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* FILA DETALLES (EXPANDIBLE) */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <td colSpan="6" className="p-0">
+                            <div className="p-6 pl-16 animate-in fade-in slide-in-from-top-2">
+                              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-200 pb-2">
+                                Desglose de Partidas (
+                                {mov.movimientos_detalles?.length || 0})
+                              </h4>
+                              <div className="space-y-2">
+                                {mov.movimientos_detalles?.map((det, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex justify-between items-center bg-white border border-slate-200 p-3 rounded-xl shadow-sm"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 bg-slate-100 rounded flex items-center justify-center text-slate-400 font-black text-xs shrink-0">
+                                        x{det.cantidad}
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-bold text-slate-800">
+                                          {det.inventario?.descripcion}
+                                        </p>
+                                        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                          Mod: {det.inventario?.modelo || "N/A"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-xs font-black text-slate-700">
+                                        $
+                                        {det.subtotal.toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}{" "}
+                                        {mov.es_importacion ? "USD" : "MXN"}
+                                      </p>
+                                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                                        $ {det.precio_unitario} c/u
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => {
-                          setMovimientoToEdit(m);
-                          setIsModalOpen(true);
-                        }}
-                        className="p-2 mr-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-
-                      <button
-                        onClick={() => eliminarMovimiento(m.id)}
-                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                    </React.Fragment>
+                  );
+                })
+              )}
+              {movsPaginados.length === 0 && !cargando && (
+                <tr>
+                  <td
+                    colSpan="6"
+                    className="p-12 text-center text-slate-400 font-bold"
+                  >
+                    No se encontraron operaciones con estos filtros.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* MODAL DE OPERACIONES */}
       <ModalMovimiento
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        movimientoAEditar={movimientoAEditar}
+        productos={productos}
         onGuardado={cargarDatos}
-        inventario={inventario}
-        movimientoEdicion={movimientoToEdit}
       />
     </div>
   );

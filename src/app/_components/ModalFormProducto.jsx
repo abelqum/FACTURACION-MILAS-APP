@@ -103,34 +103,57 @@ export default function ModalFormProducto({
           showConfirmButton: false,
         });
       } else {
+        // CREAR NUEVO
         const { data: nuevo, error } = await supabase
           .from("inventario")
           .insert([payloadLimpio])
           .select()
           .single();
+
         if (error) throw error;
 
-        const qrDataUrl = await QRCode.toDataURL(nuevo.id, { width: 300 });
-        let arr = qrDataUrl.split(","),
-          bstr = atob(arr[1]),
-          n = bstr.length,
-          u8arr = new Uint8Array(n);
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
-        }
-        const fileName = `qr_${nuevo.id}.png`;
-        const { error: upErr } = await supabase.storage
-          .from("qr")
-          .upload(fileName, new Blob([u8arr], { type: "image/png" }));
-        if (!upErr) {
-          const { data: url } = supabase.storage
+        // 🟢 NUEVA LÓGICA DE GENERACIÓN Y SUBIDA DE QR MÁS SEGURA
+        try {
+          // 1. Generamos el QR asegurando que el ID sea texto
+          const qrDataUrl = await QRCode.toDataURL(String(nuevo.id), {
+            width: 300,
+          });
+
+          // 2. Convertimos a Blob de forma nativa (más seguro que usar atob)
+          const resBlob = await fetch(qrDataUrl);
+          const blob = await resBlob.blob();
+
+          const fileName = `qr_${nuevo.id}.png`;
+
+          // 3. Subimos a Supabase Storage con upsert (por si acaso)
+          const { error: upErr } = await supabase.storage
+            .from("qr")
+            .upload(fileName, blob, {
+              contentType: "image/png",
+              upsert: true,
+            });
+
+          if (upErr) {
+            console.error("Error subiendo al bucket:", upErr);
+            throw new Error(
+              `El producto se creó, pero el QR falló: ${upErr.message}`,
+            );
+          }
+
+          // 4. Obtenemos URL pública y actualizamos el inventario
+          const { data: urlData } = supabase.storage
             .from("qr")
             .getPublicUrl(fileName);
+
           await supabase
             .from("inventario")
-            .update({ qr_url: url.publicUrl })
+            .update({ qr_url: urlData.publicUrl })
             .eq("id", nuevo.id);
+        } catch (qrError) {
+          // Si falla el QR, le avisamos al usuario pero no detenemos todo
+          Swal.fire("Advertencia", qrError.message, "warning");
         }
+
         Swal.fire("Éxito", "Producto registrado correctamente.", "success");
       }
       onGuardado();

@@ -29,6 +29,7 @@ import dynamic from "next/dynamic";
 // Editor de texto enriquecido para la firma
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
 import "react-quill-new/dist/quill.snow.css";
+import ReparadorQRs from "@/app/_components/ReparadorQRs";
 
 const CATALOGOS = [
   { id: "inventario_categorias", titulo: "Categorías", icono: "📦" },
