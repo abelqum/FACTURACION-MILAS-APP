@@ -23,7 +23,7 @@ import {
   PackageMinus,
   Wrench,
   Copy,
-} from "lucide-react"; // 🟢 Asegurarse de tener Trash2 aquí
+} from "lucide-react";
 
 import ModalAjusteStock from "@/app/_components/ModalAjusteStock";
 import ModalFormProducto from "@/app/_components/ModalFormProducto";
@@ -45,6 +45,9 @@ export default function InventarioPage() {
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 15;
 
+  // 🟢 ESTADO PARA SELECCIÓN MÚLTIPLE
+  const [selectedIds, setSelectedIds] = useState([]);
+
   const [catalogos, setCatalogos] = useState({
     udms: [],
     marcas: [],
@@ -62,100 +65,14 @@ export default function InventarioPage() {
   const [productoToEdit, setProductoToEdit] = useState(null);
   const [productoScanner, setProductoScanner] = useState(null);
 
-  const duplicarProducto = async (p) => {
-    const confirm = await Swal.fire({
-      title: "¿Duplicar producto?",
-      text: `Se creará una copia de: ${p.descripcion}`,
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Sí, duplicar",
-    });
-
-    if (confirm.isConfirmed) {
-      setCargando(true);
-      try {
-        // 🟢 1. LIMPIEZA ABSOLUTA: Mandamos SOLO las columnas que existen en tu tabla
-        const nuevoProducto = {
-          descripcion: `${p.descripcion} (DUPLICADO)`,
-          modelo: p.modelo || null,
-          id_categoria: p.id_categoria || null,
-          id_marca: p.id_marca || null,
-          id_proveedor: p.id_proveedor || null,
-          id_almacen: p.id_almacen || null,
-          id_condicion: p.id_condicion || null,
-          id_udm: p.id_udm || null,
-          id_medida: p.id_medida || null,
-          fila: p.fila || null,
-          precio_unitario: p.precio_unitario || 0,
-          stock_minimo: p.stock_minimo || 1,
-          cantidad: 0, // Stock en 0 por seguridad
-          es_kit: p.es_kit || false,
-        };
-
-        // 2. Insertar en BD
-        const { data: nuevo, error } = await supabase
-          .from("inventario")
-          .insert([nuevoProducto])
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // 3. Generar nuevo QR para el clon
-        const qrDataUrl = await QRCode.toDataURL(String(nuevo.id), {
-          width: 300,
-        });
-        const resBlob = await fetch(qrDataUrl);
-        const blob = await resBlob.blob();
-        const fileName = `qr_${nuevo.id}.png`;
-
-        await supabase.storage
-          .from("qr")
-          .upload(fileName, blob, { upsert: true });
-        const { data: urlData } = supabase.storage
-          .from("qr")
-          .getPublicUrl(fileName);
-
-        await supabase
-          .from("inventario")
-          .update({ qr_url: urlData.publicUrl })
-          .eq("id", nuevo.id);
-
-        Swal.fire(
-          "Copiado",
-          "Producto duplicado con éxito. Ahora puedes editar su condición.",
-          "success",
-        );
-
-        // Refrescar la tabla (Asegúrate de que esta sea tu función para recargar la tabla)
-        cargarInventario();
-      } catch (error) {
-        Swal.fire("Error", error.message, "error");
-      } finally {
-        setCargando(false);
-      }
-    }
-  };
   const cargarCatalogos = async () => {
     const { data: udms } = await supabase.from("inventario_udm").select("*");
-    const { data: marcas } = await supabase
-      .from("inventario_marcas")
-      .select("*");
-    const { data: almacenes } = await supabase
-      .from("inventario_almacenes")
-      .select("*");
-    const { data: condiciones } = await supabase
-      .from("inventario_condiciones")
-      .select("*");
-    const { data: categorias } = await supabase
-      .from("inventario_categorias")
-      .select("*");
-    const { data: proveedores } = await supabase
-      .from("inventario_proveedores")
-      .select("*");
-    const { data: medidas } = await supabase
-      .from("inventario_medidas")
-      .select("*");
+    const { data: marcas } = await supabase.from("inventario_marcas").select("*");
+    const { data: almacenes } = await supabase.from("inventario_almacenes").select("*");
+    const { data: condiciones } = await supabase.from("inventario_condiciones").select("*");
+    const { data: categorias } = await supabase.from("inventario_categorias").select("*");
+    const { data: proveedores } = await supabase.from("inventario_proveedores").select("*");
+    const { data: medidas } = await supabase.from("inventario_medidas").select("*");
 
     setCatalogos({
       udms: udms || [],
@@ -190,214 +107,231 @@ export default function InventarioPage() {
     cargarInventario();
   }, []);
 
+  const limpiarFiltros = () => {
+    setFiltros({ marca: "", categoria: "", medida: "", almacen: "", estatus: "" });
+    setPaginaActual(1);
+    setSelectedIds([]); // Limpiamos selección al cambiar filtros
+  };
+
   const buscarYAbrirAjuste = (id) => {
     const prod = inventario.find((p) => p.id === id);
     if (prod) {
       setProductoScanner(prod);
       setIsModalAjusteOpen(true);
     } else {
-      Swal.fire(
-        "No Encontrado",
-        "Este QR no corresponde a ningún producto del inventario.",
-        "warning",
-      );
+      Swal.fire("No Encontrado", "Este QR no corresponde a ningún producto.", "warning");
     }
   };
 
-  const limpiarFiltros = () => {
-    setFiltros({
-      marca: "",
-      categoria: "",
-      medida: "",
-      almacen: "",
-      estatus: "",
-    });
-    setPaginaActual(1);
+  // 🟢 LÓGICA DE SELECCIÓN MÚLTIPLE
+  const handleSelectAll = (e, itemsDePagina) => {
+    if (e.target.checked) {
+      const nuevosIds = itemsDePagina.map(p => p.id).filter(id => !selectedIds.includes(id));
+      setSelectedIds([...selectedIds, ...nuevosIds]);
+    } else {
+      const idsPagina = itemsDePagina.map(p => p.id);
+      setSelectedIds(selectedIds.filter(id => !idsPagina.includes(id)));
+    }
   };
 
-  // 🟢 FUNCIÓN SEGURA PARA ELIMINAR PRODUCTOS
-  const eliminarProducto = async (producto) => {
+  const handleSelectOne = (id) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(selectedId => selectedId !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  // 🟢 BORRADO MASIVO
+ // 🟢 BORRADO MASIVO
+  const eliminarSeleccionados = async () => {
+    if (selectedIds.length === 0) return;
+
     const confirm = await Swal.fire({
-      title: "¿Eliminar Producto?",
-      text: "Si este producto ya tiene un historial en Kárdex (entradas/salidas) o pertenece a un Kit, el sistema bloqueará su eliminación por seguridad financiera.",
+      title: `¿Eliminar ${selectedIds.length} productos?`,
+      text: "¿Estás seguro de que deseas borrar lo seleccionado?",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
-      confirmButtonText: "Sí, intentar borrar",
-      cancelButtonText: "Cancelar",
+      confirmButtonText: "Sí, borrar todo",
+      cancelButtonText: "Cancelar"
+    });
+
+    if (confirm.isConfirmed) {
+      setCargando(true);
+      let borrados = 0;
+
+      for (const id of selectedIds) {
+        const producto = inventario.find(p => p.id === id);
+        if (!producto) continue;
+
+        try {
+          if (producto.qr_url) {
+            const fileName = `qr_${producto.id}.png`;
+            await supabase.storage.from("qr").remove([fileName]);
+          }
+
+          const { error } = await supabase.from("inventario").delete().eq("id", id);
+          if (!error) borrados++;
+          
+        } catch (error) {
+          console.error("Error al borrar:", error);
+        }
+      }
+
+      Swal.fire(
+        "Completado",
+        `Se borraron ${borrados} productos.`,
+        "success"
+      );
+      
+      setSelectedIds([]);
+      cargarInventario();
+    }
+  };
+  const duplicarProducto = async (p) => {
+    const confirm = await Swal.fire({
+      title: "¿Duplicar producto?",
+      text: `Se creará una copia de: ${p.descripcion}`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sí, duplicar",
     });
 
     if (confirm.isConfirmed) {
       setCargando(true);
       try {
-        // 1. Borramos la imagen del QR del Bucket para no dejar basura
-        if (producto.qr_url) {
-          const fileName = `qr_${producto.id}.png`;
-          await supabase.storage.from("qr").remove([fileName]);
-        }
+        const nuevoProducto = {
+          descripcion: `${p.descripcion} (DUPLICADO)`,
+          modelo: p.modelo || null,
+          id_categoria: p.id_categoria || null,
+          id_marca: p.id_marca || null,
+          id_proveedor: p.id_proveedor || null,
+          id_almacen: p.id_almacen || null,
+          id_condicion: p.id_condicion || null,
+          id_udm: p.id_udm || null,
+          id_medida: p.id_medida || null,
+          fila: p.fila || null,
+          precio_unitario: p.precio_unitario || 0,
+          stock_minimo: p.stock_minimo || 1,
+          cantidad: 0,
+          es_kit: p.es_kit || false,
+        };
 
-        // 2. Intentamos borrar de la base de datos
-        const { error } = await supabase
-          .from("inventario")
-          .delete()
-          .eq("id", producto.id);
+        const { data: nuevo, error } = await supabase.from("inventario").insert([nuevoProducto]).select().single();
+        if (error) throw error;
 
-        if (error) {
-          throw new Error(
-            "No se pudo eliminar el producto. Probablemente tiene movimientos de auditoría registrados o forma parte de un Kit. Para mantener la integridad financiera, no se permite su borrado.",
-          );
-        }
+        const qrDataUrl = await QRCode.toDataURL(String(nuevo.id), { width: 300 });
+        const resBlob = await fetch(qrDataUrl);
+        const blob = await resBlob.blob();
+        const fileName = `qr_${nuevo.id}.png`;
 
-        Swal.fire({
-          icon: "success",
-          title: "Eliminado",
-          toast: true,
-          position: "top-end",
-          timer: 2000,
-          showConfirmButton: false,
-        });
+        await supabase.storage.from("qr").upload(fileName, blob, { upsert: true });
+        const { data: urlData } = supabase.storage.from("qr").getPublicUrl(fileName);
+        await supabase.from("inventario").update({ qr_url: urlData.publicUrl }).eq("id", nuevo.id);
+
+        Swal.fire("Copiado", "Producto duplicado con éxito.", "success");
         cargarInventario();
       } catch (error) {
-        Swal.fire("No permitido", error.message, "error");
+        Swal.fire("Error", error.message, "error");
       } finally {
         setCargando(false);
       }
     }
   };
 
-  const armarKit = async (kit) => {
-    Swal.fire({
-      title: "Verificando stock...",
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
+ // 🟢 BORRADO INDIVIDUAL
+  const eliminarProducto = async (producto) => {
+    const confirm = await Swal.fire({
+      title: "¿Eliminar Producto?",
+      text: "¿Estás seguro de que deseas eliminarlo?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      confirmButtonText: "Sí, borrar",
+      cancelButtonText: "Cancelar",
     });
+
+    if (confirm.isConfirmed) {
+      setCargando(true);
+      try {
+        if (producto.qr_url) {
+          const fileName = `qr_${producto.id}.png`;
+          await supabase.storage.from("qr").remove([fileName]);
+        }
+        
+        const { error } = await supabase.from("inventario").delete().eq("id", producto.id);
+        if (error) throw error;
+
+        Swal.fire({ icon: "success", title: "Eliminado", toast: true, position: "top-end", timer: 2000, showConfirmButton: false });
+        setSelectedIds(selectedIds.filter(id => id !== producto.id));
+        cargarInventario();
+      } catch (error) {
+        Swal.fire("Error", "No se pudo eliminar el producto.", "error");
+      } finally {
+        setCargando(false);
+      }
+    }
+  };
+
+  // ... (armarKit, desarmarKit y generarCatalogoPDF se mantienen igual)
+  const armarKit = async (kit) => {
+    Swal.fire({ title: "Verificando stock...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
-      const { data: componentes } = await supabase
-        .from("kit_componentes")
-        .select("*")
-        .eq("id_kit", kit.id);
+      const { data: componentes } = await supabase.from("kit_componentes").select("*").eq("id_kit", kit.id);
       let faltantes = [];
       let detallesComponentes = [];
 
       for (let comp of componentes) {
-        const { data: prod } = await supabase
-          .from("inventario")
-          .select("descripcion, cantidad")
-          .eq("id", comp.id_producto)
-          .single();
+        const { data: prod } = await supabase.from("inventario").select("descripcion, cantidad").eq("id", comp.id_producto).single();
         if (Number(prod.cantidad) < Number(comp.cantidad_necesaria)) {
-          faltantes.push(
-            `• ${prod.descripcion} (Te faltan ${Number(comp.cantidad_necesaria) - Number(prod.cantidad)})`,
-          );
+          faltantes.push(`• ${prod.descripcion} (Te faltan ${Number(comp.cantidad_necesaria) - Number(prod.cantidad)})`);
         }
         detallesComponentes.push({ ...comp, actualStock: prod.cantidad });
       }
 
-      if (faltantes.length > 0)
-        return Swal.fire(
-          "Stock Insuficiente",
-          "No puedes armar este kit. Faltan:\n\n" + faltantes.join("\n"),
-          "error",
-        );
+      if (faltantes.length > 0) return Swal.fire("Stock Insuficiente", "No puedes armar este kit. Faltan:\n\n" + faltantes.join("\n"), "error");
 
-      Swal.fire({
-        title: "Armando Kit...",
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
+      Swal.fire({ title: "Armando Kit...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
       for (let comp of detallesComponentes) {
-        const nuevoStock =
-          Number(comp.actualStock) - Number(comp.cantidad_necesaria);
-        await supabase
-          .from("inventario")
-          .update({ cantidad: nuevoStock })
-          .eq("id", comp.id_producto);
+        const nuevoStock = Number(comp.actualStock) - Number(comp.cantidad_necesaria);
+        await supabase.from("inventario").update({ cantidad: nuevoStock }).eq("id", comp.id_producto);
       }
 
-      await supabase
-        .from("inventario")
-        .update({ cantidad: Number(kit.cantidad) + 1 })
-        .eq("id", kit.id);
+      await supabase.from("inventario").update({ cantidad: Number(kit.cantidad) + 1 }).eq("id", kit.id);
       cargarInventario();
-      Swal.fire({
-        icon: "success",
-        title: "Kit Armado",
-        toast: true,
-        position: "top-end",
-        timer: 2500,
-        showConfirmButton: false,
-      });
+      Swal.fire({ icon: "success", title: "Kit Armado", toast: true, position: "top-end", timer: 2500, showConfirmButton: false });
     } catch (error) {
       Swal.fire("Error", "Fallo al armar kit: " + error.message, "error");
     }
   };
 
   const desarmarKit = async (kit) => {
-    if (Number(kit.cantidad) <= 0)
-      return Swal.fire(
-        "Atención",
-        "No tienes kits armados para desarmar.",
-        "warning",
-      );
-    Swal.fire({
-      title: "Desarmando Kit...",
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
-    });
+    if (Number(kit.cantidad) <= 0) return Swal.fire("Atención", "No tienes kits armados para desarmar.", "warning");
+    Swal.fire({ title: "Desarmando Kit...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
-      const { data: componentes } = await supabase
-        .from("kit_componentes")
-        .select("*")
-        .eq("id_kit", kit.id);
+      const { data: componentes } = await supabase.from("kit_componentes").select("*").eq("id_kit", kit.id);
 
       for (let comp of componentes) {
-        const { data: prod } = await supabase
-          .from("inventario")
-          .select("cantidad")
-          .eq("id", comp.id_producto)
-          .single();
-        const nuevoStock =
-          Number(prod.cantidad) + Number(comp.cantidad_necesaria);
-        await supabase
-          .from("inventario")
-          .update({ cantidad: nuevoStock })
-          .eq("id", comp.id_producto);
+        const { data: prod } = await supabase.from("inventario").select("cantidad").eq("id", comp.id_producto).single();
+        const nuevoStock = Number(prod.cantidad) + Number(comp.cantidad_necesaria);
+        await supabase.from("inventario").update({ cantidad: nuevoStock }).eq("id", comp.id_producto);
       }
 
-      await supabase
-        .from("inventario")
-        .update({ cantidad: Number(kit.cantidad) - 1 })
-        .eq("id", kit.id);
+      await supabase.from("inventario").update({ cantidad: Number(kit.cantidad) - 1 }).eq("id", kit.id);
       cargarInventario();
-      Swal.fire({
-        icon: "success",
-        title: "Kit Desarmado",
-        toast: true,
-        position: "top-end",
-        timer: 2500,
-        showConfirmButton: false,
-      });
+      Swal.fire({ icon: "success", title: "Kit Desarmado", toast: true, position: "top-end", timer: 2500, showConfirmButton: false });
     } catch (error) {
       Swal.fire("Error", "Fallo al desarmar kit: " + error.message, "error");
     }
   };
 
   const generarCatalogoPDF = async () => {
-    if (inventarioFiltrado.length === 0)
-      return Swal.fire("Atención", "No hay productos en la lista.", "warning");
-    Swal.fire({
-      title: "Generando catálogo...",
-      text: "Procesando códigos QR...",
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
-    });
+    if (inventarioFiltrado.length === 0) return Swal.fire("Atención", "No hay productos en la lista.", "warning");
+    Swal.fire({ title: "Generando catálogo...", text: "Procesando códigos QR...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
-      const doc = new jsPDF({
-        orientation: "landscape",
-        unit: "mm",
-        format: "a4",
-      });
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
       const convertirImagenABase64 = (url) =>
         new Promise((resolve) => {
@@ -407,98 +341,53 @@ export default function InventarioPage() {
           img.onload = () => {
             try {
               const canvas = document.createElement("canvas");
-              canvas.width = img.width;
-              canvas.height = img.height;
+              canvas.width = img.width; canvas.height = img.height;
               canvas.getContext("2d").drawImage(img, 0, 0);
               resolve(canvas.toDataURL("image/jpeg"));
-            } catch (err) {
-              resolve(null);
-            }
+            } catch (err) { resolve(null); }
           };
           img.onerror = () => resolve(null);
           img.src = url;
         });
 
-      const imagenesQR = await Promise.all(
-        inventarioFiltrado.map((p) => convertirImagenABase64(p.qr_url)),
-      );
-      const columnas = 4;
-      const filas = 2;
-      const itemsPorPagina = columnas * filas;
-      const cardWidth = 65;
-      const cardHeight = 85;
-      const marginX = 10;
-      const marginY = 20;
-      const espacioX = 68;
-      const espacioY = 92;
+      const imagenesQR = await Promise.all(inventarioFiltrado.map((p) => convertirImagenABase64(p.qr_url)));
+      const columnas = 4; const filas = 2; const itemsPorPagina = columnas * filas;
+      const cardWidth = 65; const cardHeight = 85; const marginX = 10; const marginY = 20; const espacioX = 68; const espacioY = 92;
 
       for (let i = 0; i < inventarioFiltrado.length; i++) {
         const producto = inventarioFiltrado[i];
         if (i % itemsPorPagina === 0) {
           if (i > 0) doc.addPage();
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(18);
-          doc.text("CATÁLOGO DE INVENTARIO - MILAS", pageWidth / 2, 12, {
-            align: "center",
-          });
-          doc.setFontSize(9);
-          doc.setTextColor(120);
-          doc.text(
-            `Total de productos: ${inventarioFiltrado.length}`,
-            pageWidth / 2,
-            18,
-            { align: "center" },
-          );
+          doc.setFont("helvetica", "bold"); doc.setFontSize(18);
+          doc.text("CATÁLOGO DE INVENTARIO - MILAS", pageWidth / 2, 12, { align: "center" });
+          doc.setFontSize(9); doc.setTextColor(120);
+          doc.text(`Total de productos: ${inventarioFiltrado.length}`, pageWidth / 2, 18, { align: "center" });
           doc.setTextColor(0);
         }
         const indexPagina = i % itemsPorPagina;
-        const col = indexPagina % columnas;
-        const row = Math.floor(indexPagina / columnas);
-        const x = marginX + col * espacioX;
-        const y = marginY + row * espacioY;
+        const col = indexPagina % columnas; const row = Math.floor(indexPagina / columnas);
+        const x = marginX + col * espacioX; const y = marginY + row * espacioY;
 
-        doc.setDrawColor(220);
-        doc.roundedRect(x, y, cardWidth, cardHeight, 3, 3);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        const nombreProducto = producto.es_kit
-          ? `[KIT] ${producto.descripcion}`
-          : producto.descripcion || "Sin descripción";
-        doc.text(
-          doc.splitTextToSize(nombreProducto, cardWidth - 6),
-          x + 3,
-          y + 6,
-        );
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
+        doc.setDrawColor(220); doc.roundedRect(x, y, cardWidth, cardHeight, 3, 3);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+        const nombreProducto = producto.es_kit ? `[KIT] ${producto.descripcion}` : producto.descripcion || "Sin descripción";
+        doc.text(doc.splitTextToSize(nombreProducto, cardWidth - 6), x + 3, y + 6);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8);
         doc.text(`Modelo: ${producto.modelo || "N/A"}`, x + 3, y + 18);
         doc.text(`Marca: ${producto.marca?.nombre || "N/A"}`, x + 3, y + 23);
         doc.text(`Cantidad: ${producto.cantidad}`, x + 3, y + 28);
 
         const qrBase64 = imagenesQR[i];
         if (qrBase64) {
-          try {
-            doc.addImage(qrBase64, "JPEG", x + 12, y + 33, 40, 40);
-          } catch (err) {
-            doc.setFontSize(7);
-            doc.text("QR no disponible", x + 18, y + 55);
-          }
+          try { doc.addImage(qrBase64, "JPEG", x + 12, y + 33, 40, 40); } catch (err) { doc.setFontSize(7); doc.text("QR no disponible", x + 18, y + 55); }
         } else {
-          doc.setFontSize(7);
-          doc.text("QR no disponible", x + 18, y + 55);
+          doc.setFontSize(7); doc.text("QR no disponible", x + 18, y + 55);
         }
-        doc.setFontSize(7);
-        doc.setTextColor(120);
-        doc.text(`ID: ${producto.id}`, x + 3, y + 80);
-        doc.setTextColor(0);
+        doc.setFontSize(7); doc.setTextColor(120); doc.text(`ID: ${producto.id}`, x + 3, y + 80); doc.setTextColor(0);
       }
       doc.save("Catalogo_MILAS.pdf");
       Swal.close();
-      Swal.fire(
-        "¡Listo!",
-        "El catálogo PDF se generó correctamente.",
-        "success",
-      );
+      Swal.fire("¡Listo!", "El catálogo PDF se generó correctamente.", "success");
     } catch (error) {
       Swal.close();
       Swal.fire("Error", "Hubo un fallo generando el PDF.", "error");
@@ -510,38 +399,21 @@ export default function InventarioPage() {
       p.descripcion?.toLowerCase().includes(busqueda.toLowerCase()) ||
       p.modelo?.toLowerCase().includes(busqueda.toLowerCase());
     const matchMarca = filtros.marca ? p.id_marca == filtros.marca : true;
-    const matchCategoria = filtros.categoria
-      ? p.id_categoria == filtros.categoria
-      : true;
+    const matchCategoria = filtros.categoria ? p.id_categoria == filtros.categoria : true;
     const matchMedida = filtros.medida ? p.id_medida == filtros.medida : true;
-    const matchAlmacen = filtros.almacen
-      ? p.id_almacen == filtros.almacen
-      : true;
+    const matchAlmacen = filtros.almacen ? p.id_almacen == filtros.almacen : true;
     let matchEstatus = true;
-    if (filtros.estatus === "comprar")
-      matchEstatus = Number(p.cantidad) <= Number(p.stock_minimo);
-    if (filtros.estatus === "suficiente")
-      matchEstatus = Number(p.cantidad) > Number(p.stock_minimo);
-    return (
-      matchBusqueda &&
-      matchMarca &&
-      matchCategoria &&
-      matchMedida &&
-      matchAlmacen &&
-      matchEstatus
-    );
+    if (filtros.estatus === "comprar") matchEstatus = Number(p.cantidad) <= Number(p.stock_minimo);
+    if (filtros.estatus === "suficiente") matchEstatus = Number(p.cantidad) > Number(p.stock_minimo);
+    return matchBusqueda && matchMarca && matchCategoria && matchMedida && matchAlmacen && matchEstatus;
   });
 
-  const totalPaginas =
-    Math.ceil(inventarioFiltrado.length / itemsPorPagina) || 1;
-  const inventarioPaginado = inventarioFiltrado.slice(
-    (paginaActual - 1) * itemsPorPagina,
-    paginaActual * itemsPorPagina,
-  );
-  const valorTotalInventario = inventarioFiltrado.reduce(
-    (acc, p) => acc + Number(p.cantidad) * Number(p.precio_unitario),
-    0,
-  );
+  const totalPaginas = Math.ceil(inventarioFiltrado.length / itemsPorPagina) || 1;
+  const inventarioPaginado = inventarioFiltrado.slice((paginaActual - 1) * itemsPorPagina, paginaActual * itemsPorPagina);
+  const valorTotalInventario = inventarioFiltrado.reduce((acc, p) => acc + Number(p.cantidad) * Number(p.precio_unitario), 0);
+
+  // Variable para saber si todos los de la página están seleccionados
+  const isAllSelectedOnPage = inventarioPaginado.length > 0 && inventarioPaginado.every(p => selectedIds.includes(p.id));
 
   return (
     <div className="max-w-[90rem] mx-auto space-y-6">
@@ -550,27 +422,31 @@ export default function InventarioPage() {
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
             <Package className="text-blue-700" /> Control de Inventario
           </h1>
-          <p className="text-sm text-slate-500 mt-1 font-medium">
-            Gestión, existencias y valoración.
-          </p>
+          <p className="text-sm text-slate-500 mt-1 font-medium">Gestión, existencias y valoración.</p>
         </div>
         <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center gap-4 w-full xl:w-auto shadow-sm">
           <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
             <DollarSign size={24} strokeWidth={3} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
-              Valor Filtrado
-            </p>
+            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Valor Filtrado</p>
             <p className="text-2xl font-black text-emerald-900 leading-none">
-              $
-              {valorTotalInventario.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-              })}
+              ${valorTotalInventario.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </p>
           </div>
         </div>
+        
         <div className="flex gap-2 w-full xl:w-auto shrink-0 flex-wrap">
+          {/* 🟢 BOTÓN DE BORRADO MASIVO (Solo aparece si hay seleccionados) */}
+          {selectedIds.length > 0 && (
+            <button
+              onClick={eliminarSeleccionados}
+              className="flex-1 xl:flex-none bg-red-50 text-red-600 border border-red-200 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-100 transition-all shadow-sm animate-in zoom-in duration-200"
+            >
+              <Trash2 size={16} /> Borrar ({selectedIds.length})
+            </button>
+          )}
+
           <button
             onClick={generarCatalogoPDF}
             className="flex-1 xl:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors shadow-sm"
@@ -597,15 +473,9 @@ export default function InventarioPage() {
 
       <FiltrosInventario
         busqueda={busqueda}
-        setBusqueda={(val) => {
-          setBusqueda(val);
-          setPaginaActual(1);
-        }}
+        setBusqueda={(val) => { setBusqueda(val); setPaginaActual(1); }}
         filtros={filtros}
-        setFiltros={(val) => {
-          setFiltros(val);
-          setPaginaActual(1);
-        }}
+        setFiltros={(val) => { setFiltros(val); setPaginaActual(1); }}
         catalogos={catalogos}
         limpiarFiltros={limpiarFiltros}
       />
@@ -615,6 +485,15 @@ export default function InventarioPage() {
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
               <tr>
+                {/* 🟢 CHECKBOX MAESTRO */}
+                <th className="p-4 w-12 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={isAllSelectedOnPage}
+                    onChange={(e) => handleSelectAll(e, inventarioPaginado)}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
+                  />
+                </th>
                 <th className="p-4">Producto / Kit</th>
                 <th className="p-4">Categoría</th>
                 <th className="p-4 text-center">Condición</th>
@@ -629,200 +508,92 @@ export default function InventarioPage() {
             <tbody className="divide-y divide-slate-100">
               {cargando ? (
                 <tr>
-                  <td
-                    colSpan="8"
-                    className="p-12 text-center text-slate-400 font-bold animate-pulse"
-                  >
+                  <td colSpan="10" className="p-12 text-center text-slate-400 font-bold animate-pulse">
                     Cargando almacén...
                   </td>
                 </tr>
               ) : (
                 inventarioPaginado.map((p) => {
-                  const solicitar =
-                    Number(p.cantidad) <= Number(p.stock_minimo);
+                  const solicitar = Number(p.cantidad) <= Number(p.stock_minimo);
+                  const isSelected = selectedIds.includes(p.id);
+
                   return (
                     <tr
                       key={p.id}
-                      className={`transition-colors ${p.es_kit ? "bg-indigo-50/20 hover:bg-indigo-50/50" : "hover:bg-slate-50"}`}
+                      className={`transition-colors ${isSelected ? "bg-blue-50/50" : p.es_kit ? "bg-indigo-50/20 hover:bg-indigo-50/50" : "hover:bg-slate-50"}`}
                     >
+                      {/* 🟢 CHECKBOX INDIVIDUAL */}
+                      <td className="p-4 text-center">
+                        <input 
+                          type="checkbox" 
+                          checked={isSelected}
+                          onChange={() => handleSelectOne(p.id)}
+                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer accent-blue-600"
+                        />
+                      </td>
                       <td className="p-4">
                         <div className="font-bold text-slate-800 flex items-center gap-3">
                           {p.qr_url ? (
-                            <div
-                              onClick={() => {
-                                setProductoScanner(p);
-                                setIsModalAjusteOpen(true);
-                              }}
-                              className="group relative cursor-pointer shrink-0"
-                            >
-                              <img
-                                src={p.qr_url}
-                                alt="QR"
-                                className="w-12 h-12 border border-slate-200 rounded-xl shadow-sm object-contain bg-white group-hover:scale-105 transition-transform"
-                              />
+                            <div onClick={() => { setProductoScanner(p); setIsModalAjusteOpen(true); }} className="group relative cursor-pointer shrink-0">
+                              <img src={p.qr_url} alt="QR" className="w-12 h-12 border border-slate-200 rounded-xl shadow-sm object-contain bg-white group-hover:scale-105 transition-transform" />
                               <div className="absolute inset-0 bg-blue-900/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
                             </div>
                           ) : (
                             <div className="w-12 h-12 bg-slate-100 flex items-center justify-center rounded-xl border border-slate-200 shrink-0">
-                              {p.es_kit ? (
-                                <Wrench className="text-slate-400" size={16} />
-                              ) : (
-                                <QrCode className="text-slate-300" size={16} />
-                              )}
+                              {p.es_kit ? <Wrench className="text-slate-400" size={16} /> : <QrCode className="text-slate-300" size={16} />}
                             </div>
                           )}
                           <div>
                             <p className="whitespace-normal min-w-[180px] max-w-[250px] leading-tight mb-1 flex items-center gap-2">
-                              {p.es_kit && (
-                                <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[9px] uppercase tracking-widest shrink-0">
-                                  KIT
-                                </span>
-                              )}
+                              {p.es_kit && <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[9px] uppercase tracking-widest shrink-0">KIT</span>}
                               {p.descripcion}
                             </p>
                             <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                              {p.medida_cat?.nombre && (
-                                <span className="bg-slate-800 text-white px-1.5 py-0.5 rounded text-[9px] uppercase tracking-widest font-black">
-                                  {p.medida_cat.nombre}
-                                </span>
-                              )}
-                              {!p.es_kit && (
-                                <span className="text-[10px] text-slate-500">
-                                  Mod: {p.modelo || "N/A"} • {p.marca?.nombre}
-                                </span>
-                              )}
+                              {p.medida_cat?.nombre && <span className="bg-slate-800 text-white px-1.5 py-0.5 rounded text-[9px] uppercase tracking-widest font-black">{p.medida_cat.nombre}</span>}
+                              {!p.es_kit && <span className="text-[10px] text-slate-500">Mod: {p.modelo || "N/A"} • {p.marca?.nombre}</span>}
                             </div>
                           </div>
                         </div>
                       </td>
                       <td className="p-4">
-                        {p.categoria ? (
-                          <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-widest font-bold">
-                            {p.categoria.nombre}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
-                            Sin asignar
-                          </span>
-                        )}
+                        {p.categoria ? <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-widest font-bold">{p.categoria.nombre}</span> : <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Sin asignar</span>}
                       </td>
                       <td className="p-4 text-center">
-                        {p.condicion ? (
-                          <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-widest font-bold">
-                            {p.condicion.nombre}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
-                            N/A
-                          </span>
-                        )}
+                        {p.condicion ? <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-widest font-bold">{p.condicion.nombre}</span> : <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">N/A</span>}
                       </td>
                       <td className="p-4">
-                        {p.proveedor ? (
-                          <span
-                            className="font-bold text-slate-700 text-xs truncate max-w-[120px] block"
-                            title={p.proveedor.nombre}
-                          >
-                            {p.proveedor.nombre}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
-                            Sin asignar
-                          </span>
-                        )}
+                        {p.proveedor ? <span className="font-bold text-slate-700 text-xs truncate max-w-[120px] block" title={p.proveedor.nombre}>{p.proveedor.nombre}</span> : <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Sin asignar</span>}
                       </td>
                       <td className="p-4 text-center">
-                        {p.proveedor?.enlace ? (
-                          <a
-                            href={p.proveedor.enlace}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center bg-blue-50 text-blue-600 p-2 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                          >
-                            <LinkIcon size={16} />
-                          </a>
-                        ) : (
-                          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
-                            Sin Link
-                          </span>
-                        )}
+                        {p.proveedor?.enlace ? <a href={p.proveedor.enlace} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center bg-blue-50 text-blue-600 p-2 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"><LinkIcon size={16} /></a> : <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Sin Link</span>}
                       </td>
                       <td className="p-4">
-                        <p className="font-bold text-slate-700 text-xs">
-                          {p.almacen?.nombre ||
-                            (p.es_kit ? "Zona de Kits" : "N/A")}
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
-                          Fila: {p.fila || "N/A"}
-                        </p>
+                        <p className="font-bold text-slate-700 text-xs">{p.almacen?.nombre || (p.es_kit ? "Zona de Kits" : "N/A")}</p>
+                        <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Fila: {p.fila || "N/A"}</p>
                       </td>
                       <td className="p-4 text-center">
-                        <span
-                          className={`text-base font-black ${p.es_kit ? "text-indigo-700" : solicitar ? "text-red-600" : "text-blue-700"}`}
-                        >
-                          {p.cantidad}
-                        </span>
+                        <span className={`text-base font-black ${p.es_kit ? "text-indigo-700" : solicitar ? "text-red-600" : "text-blue-700"}`}>{p.cantidad}</span>
                       </td>
                       <td className="p-4 text-center">
                         {p.es_kit ? (
-                          <span className="inline-flex items-center justify-center gap-1 text-[9px] font-black px-2 py-1 bg-indigo-100 text-indigo-700 rounded uppercase tracking-widest">
-                            Ensamblaje
-                          </span>
+                          <span className="inline-flex items-center justify-center gap-1 text-[9px] font-black px-2 py-1 bg-indigo-100 text-indigo-700 rounded uppercase tracking-widest">Ensamblaje</span>
                         ) : solicitar ? (
-                          <span className="inline-flex items-center justify-center gap-1 text-[9px] font-black px-2 py-1 bg-red-100 text-red-700 rounded uppercase tracking-widest">
-                            <AlertTriangle size={10} /> Comprar
-                          </span>
+                          <span className="inline-flex items-center justify-center gap-1 text-[9px] font-black px-2 py-1 bg-red-100 text-red-700 rounded uppercase tracking-widest"><AlertTriangle size={10} /> Comprar</span>
                         ) : (
-                          <span className="inline-flex items-center justify-center gap-1 text-[9px] font-black px-2 py-1 bg-emerald-100 text-emerald-700 rounded uppercase tracking-widest">
-                            <CheckCircle size={10} /> Suficiente
-                          </span>
+                          <span className="inline-flex items-center justify-center gap-1 text-[9px] font-black px-2 py-1 bg-emerald-100 text-emerald-700 rounded uppercase tracking-widest"><CheckCircle size={10} /> Suficiente</span>
                         )}
                       </td>
                       <td className="p-4 text-center">
-                        {/* 🟢 SE AGREGÓ EL BOTÓN DE BORRAR PARA PRODUCTOS NORMALES */}
                         {p.es_kit ? (
                           <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => armarKit(p)}
-                              className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors"
-                              title="Armar Kit"
-                            >
-                              <PackagePlus size={16} />
-                            </button>
-                            <button
-                              onClick={() => desarmarKit(p)}
-                              className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg transition-colors"
-                              title="Desarmar Kit"
-                            >
-                              <PackageMinus size={16} />
-                            </button>
+                            <button onClick={() => armarKit(p)} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors" title="Armar Kit"><PackagePlus size={16} /></button>
+                            <button onClick={() => desarmarKit(p)} className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white rounded-lg transition-colors" title="Desarmar Kit"><PackageMinus size={16} /></button>
                           </div>
                         ) : (
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => {
-                                setProductoToEdit(p);
-                                setIsModalAddOpen(true);
-                              }}
-                              className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-colors"
-                              title="Editar"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => eliminarProducto(p)}
-                              className="p-2 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg transition-colors"
-                              title="Borrar"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => duplicarProducto(p)}
-                              className="p-2 bg-slate-50 text-slate-500 hover:bg-slate-200 rounded-lg"
-                              title="Duplicar"
-                            >
-                              <Copy size={16} />
-                            </button>
+                            <button onClick={() => { setProductoToEdit(p); setIsModalAddOpen(true); }} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-colors" title="Editar"><Edit2 size={16} /></button>
+                            <button onClick={() => eliminarProducto(p)} className="p-2 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg transition-colors" title="Borrar"><Trash2 size={16} /></button>
+                            <button onClick={() => duplicarProducto(p)} className="p-2 bg-slate-50 text-slate-500 hover:bg-slate-200 rounded-lg transition-colors" title="Duplicar"><Copy size={16} /></button>
                           </div>
                         )}
                       </td>
@@ -832,12 +603,7 @@ export default function InventarioPage() {
               )}
               {inventarioPaginado.length === 0 && !cargando && (
                 <tr>
-                  <td
-                    colSpan="8"
-                    className="p-12 text-center text-slate-400 font-bold"
-                  >
-                    No se encontraron productos con estos filtros.
-                  </td>
+                  <td colSpan="10" className="p-12 text-center text-slate-400 font-bold">No se encontraron productos con estos filtros.</td>
                 </tr>
               )}
             </tbody>
@@ -845,67 +611,34 @@ export default function InventarioPage() {
         </div>
         {!cargando && inventarioFiltrado.length > itemsPorPagina && (
           <div className="bg-slate-50 border-t border-slate-200 p-4 flex justify-between items-center shrink-0">
-            <button
-              onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
-              disabled={paginaActual === 1}
-              className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 font-bold text-xs hover:bg-slate-100 disabled:opacity-40 transition-colors flex items-center gap-1"
-            >
+            <button onClick={() => setPaginaActual((p) => Math.max(1, p - 1))} disabled={paginaActual === 1} className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 font-bold text-xs hover:bg-slate-100 disabled:opacity-40 transition-colors flex items-center gap-1">
               <ChevronLeft size={16} /> Anterior
             </button>
             <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
               Página {paginaActual} de {totalPaginas}
             </span>
-            <button
-              onClick={() =>
-                setPaginaActual((p) => Math.min(totalPaginas, p + 1))
-              }
-              disabled={paginaActual === totalPaginas}
-              className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 font-bold text-xs hover:bg-slate-100 disabled:opacity-40 transition-colors flex items-center gap-1"
-            >
+            <button onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))} disabled={paginaActual === totalPaginas} className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 font-bold text-xs hover:bg-slate-100 disabled:opacity-40 transition-colors flex items-center gap-1">
               Siguiente <ChevronRight size={16} />
             </button>
           </div>
         )}
       </div>
+
       {isModalScannerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 relative overflow-hidden">
-            <button
-              onClick={() => setIsModalScannerOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-red-500 z-[100] bg-white rounded-full transition-colors"
-            >
-              <X size={24} />
-            </button>
+            <button onClick={() => setIsModalScannerOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 z-[100] bg-white rounded-full transition-colors"><X size={24} /></button>
             <div className="text-center mb-4 pt-2">
-              <h3 className="font-black text-slate-800 text-lg">
-                Escáner de Inventario
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Da permiso a la cámara y apunta al código QR.
-              </p>
+              <h3 className="font-black text-slate-800 text-lg">Escáner de Inventario</h3>
+              <p className="text-xs text-slate-500 font-medium">Da permiso a la cámara y apunta al código QR.</p>
             </div>
-            <LectorQR
-              onScanExitoso={(idScaneado) => {
-                setIsModalScannerOpen(false);
-                buscarYAbrirAjuste(idScaneado);
-              }}
-            />
+            <LectorQR onScanExitoso={(idScaneado) => { setIsModalScannerOpen(false); buscarYAbrirAjuste(idScaneado); }} />
           </div>
         </div>
       )}
-      <ModalAjusteStock
-        isOpen={isModalAjusteOpen}
-        onClose={() => setIsModalAjusteOpen(false)}
-        producto={productoScanner}
-        onActualizado={cargarInventario}
-      />
-      <ModalFormProducto
-        isOpen={isModalAddOpen}
-        onClose={() => setIsModalAddOpen(false)}
-        productoEdicion={productoToEdit}
-        catalogos={catalogos}
-        onGuardado={cargarInventario}
-      />
+
+      <ModalAjusteStock isOpen={isModalAjusteOpen} onClose={() => setIsModalAjusteOpen(false)} producto={productoScanner} onActualizado={cargarInventario} />
+      <ModalFormProducto isOpen={isModalAddOpen} onClose={() => setIsModalAddOpen(false)} productoEdicion={productoToEdit} catalogos={catalogos} onGuardado={cargarInventario} />
     </div>
   );
 }
