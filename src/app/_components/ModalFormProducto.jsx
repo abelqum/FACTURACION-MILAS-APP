@@ -91,20 +91,80 @@ export default function ModalFormProducto({
     }
   };
 
+  // 🟢 MOTOR DE OPTIMIZACIÓN DE IMÁGENES (REDUCE PESO Y CONVIERTE A WEBP)
+  const optimizarImagen = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 800; // Resolución ideal para catálogos web
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          // Cálculo para mantener la proporción de la imagen
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convierte a WebP con calidad del 80%
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const optimizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".webp"), {
+                  type: "image/webp",
+                });
+                resolve(optimizedFile);
+              } else {
+                reject(new Error("Error al procesar la imagen."));
+              }
+            },
+            "image/webp",
+            0.8
+          );
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setCargando(true);
     try {
       let finalFotoUrl = form.foto_url;
 
-      // 🟢 1. SUBIR LA FOTO AL BUCKET (SI SE SELECCIONÓ UNA NUEVA)
+      // 🟢 1. OPTIMIZAR Y SUBIR LA FOTO AL BUCKET (SI SE SELECCIONÓ UNA NUEVA)
       if (fotoArchivo) {
-        const fileExt = fotoArchivo.name.split('.').pop();
-        const fileName = `prod_${Date.now()}.${fileExt}`;
+        Swal.fire({ title: "Optimizando imagen...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        const optimizedFile = await optimizarImagen(fotoArchivo);
+        const fileName = `prod_${Date.now()}.webp`; // Ahora siempre será .webp
 
         const { error: upErr } = await supabase.storage
           .from("fotos_productos")
-          .upload(fileName, fotoArchivo, { upsert: true });
+          .upload(fileName, optimizedFile, { 
+            contentType: "image/webp",
+            upsert: true 
+          });
 
         if (upErr) throw new Error(`Error subiendo foto: ${upErr.message}`);
 
@@ -113,6 +173,7 @@ export default function ModalFormProducto({
           .getPublicUrl(fileName);
 
         finalFotoUrl = urlData.publicUrl;
+        Swal.close();
       }
 
       // 2. PREPARAR EL PAYLOAD
@@ -126,7 +187,7 @@ export default function ModalFormProducto({
       }
 
       if (!aplicaMedida) payloadLimpio.id_medida = null;
-      payloadLimpio.foto_url = finalFotoUrl; // Asignamos la URL final de la foto
+      payloadLimpio.foto_url = finalFotoUrl;
 
       // 3. GUARDAR EN BASE DE DATOS
       if (productoEdicion) {
@@ -204,13 +265,11 @@ export default function ModalFormProducto({
               <p className="text-xs text-slate-500 mb-3">Sube una imagen o toma una foto clara para identificarlo visualmente en almacén.</p>
               
               <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                {/* Botón de Archivo Normal */}
                 <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all cursor-pointer">
                   <UploadCloud size={16} /> {fotoPreview ? "Cambiar Archivo" : "Subir Archivo"}
                   <input type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
                 </label>
 
-                {/* 🟢 NUEVO BOTÓN DE CÁMARA */}
                 <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer">
                   <Camera size={16} /> Tomar Foto
                   <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoChange} />
