@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import Swal from "sweetalert2";
 import QRCode from "qrcode";
-import { X, Save, Image as ImageIcon, UploadCloud, Camera } from "lucide-react";
+import { X, Save, Image as ImageIcon, UploadCloud } from "lucide-react";
 
 export default function ModalFormProducto({
   isOpen,
@@ -82,7 +82,7 @@ export default function ModalFormProducto({
 
   if (!isOpen) return null;
 
-  // 🟢 MANEJADOR DE LA SELECCIÓN DE IMAGEN / CÁMARA
+  // 🟢 MANEJADOR DE LA SELECCIÓN DE IMAGEN
   const handleFotoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -91,80 +91,20 @@ export default function ModalFormProducto({
     }
   };
 
-  // 🟢 MOTOR DE OPTIMIZACIÓN DE IMÁGENES (REDUCE PESO Y CONVIERTE A WEBP)
-  const optimizarImagen = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target.result;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const MAX_WIDTH = 800; // Resolución ideal para catálogos web
-          const MAX_HEIGHT = 800;
-          let width = img.width;
-          let height = img.height;
-
-          // Cálculo para mantener la proporción de la imagen
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Convierte a WebP con calidad del 80%
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                const optimizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".webp"), {
-                  type: "image/webp",
-                });
-                resolve(optimizedFile);
-              } else {
-                reject(new Error("Error al procesar la imagen."));
-              }
-            },
-            "image/webp",
-            0.8
-          );
-        };
-        img.onerror = (error) => reject(error);
-      };
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setCargando(true);
     try {
       let finalFotoUrl = form.foto_url;
 
-      // 🟢 1. OPTIMIZAR Y SUBIR LA FOTO AL BUCKET (SI SE SELECCIONÓ UNA NUEVA)
+      // 🟢 1. SUBIR LA FOTO AL BUCKET (SI SE SELECCIONÓ UNA NUEVA)
       if (fotoArchivo) {
-        Swal.fire({ title: "Optimizando imagen...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
-        const optimizedFile = await optimizarImagen(fotoArchivo);
-        const fileName = `prod_${Date.now()}.webp`; // Ahora siempre será .webp
+        const fileExt = fotoArchivo.name.split('.').pop();
+        const fileName = `prod_${Date.now()}.${fileExt}`;
 
         const { error: upErr } = await supabase.storage
           .from("fotos_productos")
-          .upload(fileName, optimizedFile, { 
-            contentType: "image/webp",
-            upsert: true 
-          });
+          .upload(fileName, fotoArchivo, { upsert: true });
 
         if (upErr) throw new Error(`Error subiendo foto: ${upErr.message}`);
 
@@ -173,7 +113,6 @@ export default function ModalFormProducto({
           .getPublicUrl(fileName);
 
         finalFotoUrl = urlData.publicUrl;
-        Swal.close();
       }
 
       // 2. PREPARAR EL PAYLOAD
@@ -187,7 +126,7 @@ export default function ModalFormProducto({
       }
 
       if (!aplicaMedida) payloadLimpio.id_medida = null;
-      payloadLimpio.foto_url = finalFotoUrl;
+      payloadLimpio.foto_url = finalFotoUrl; // Asignamos la URL final de la foto
 
       // 3. GUARDAR EN BASE DE DATOS
       if (productoEdicion) {
@@ -251,7 +190,7 @@ export default function ModalFormProducto({
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
           
-          {/* 🟢 SECCIÓN DE LA FOTO DEL PRODUCTO ACTUALIZADA */}
+          {/* 🟢 SECCIÓN DE LA FOTO DEL PRODUCTO */}
           <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
             <div className="w-32 h-32 shrink-0 bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center shadow-sm">
               {fotoPreview ? (
@@ -262,19 +201,11 @@ export default function ModalFormProducto({
             </div>
             <div className="flex-1 w-full text-center sm:text-left">
               <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-1">Fotografía del Producto</h4>
-              <p className="text-xs text-slate-500 mb-3">Sube una imagen o toma una foto clara para identificarlo visualmente en almacén.</p>
-              
-              <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all cursor-pointer">
-                  <UploadCloud size={16} /> {fotoPreview ? "Cambiar Archivo" : "Subir Archivo"}
-                  <input type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
-                </label>
-
-                <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer">
-                  <Camera size={16} /> Tomar Foto
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoChange} />
-                </label>
-              </div>
+              <p className="text-xs text-slate-500 mb-3">Sube una imagen clara para identificarlo visualmente en almacén.</p>
+              <label className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all cursor-pointer">
+                <UploadCloud size={16} /> {fotoPreview ? "Cambiar Imagen" : "Seleccionar Archivo"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
+              </label>
             </div>
           </div>
 

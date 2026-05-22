@@ -165,13 +165,19 @@ export default function InventarioPage() {
         const producto = inventario.find(p => p.id === id);
         if (!producto) continue;
 
-        try {
+   try {
+          // Limpiar QR
           if (producto.qr_url) {
-            const fileName = `qr_${producto.id}.png`;
-            await supabase.storage.from("qr").remove([fileName]);
+            const qrName = `qr_${producto.id}.png`;
+            await supabase.storage.from("qr").remove([qrName]);
           }
-          // Nota: Si borramos el producto, no es estrictamente necesario borrar la foto de `fotos_productos` 
-          // a menos que quieras liberar espacio. Por seguridad de historial solemos dejar la foto viva.
+
+          // 🟢 LIMPIAR FOTO
+          if (producto.foto_url) {
+            const urlParts = producto.foto_url.split('/');
+            const photoName = urlParts[urlParts.length - 1];
+            await supabase.storage.from("fotos_productos").remove([photoName]);
+          }
 
           const { error } = await supabase.from("inventario").delete().eq("id", id);
           if (!error) borrados++;
@@ -245,25 +251,37 @@ export default function InventarioPage() {
   };
 
   // 🟢 BORRADO INDIVIDUAL
+// 🟢 BORRADO INDIVIDUAL CON LIMPIEZA TOTAL DE ARCHIVOS
   const eliminarProducto = async (producto) => {
     const confirm = await Swal.fire({
       title: "¿Eliminar Producto?",
-      text: "¿Estás seguro de que deseas eliminarlo?",
+      text: "Se borrará el registro, su QR y su foto del sistema. ¿Confirmar?",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
-      confirmButtonText: "Sí, borrar",
+      confirmButtonText: "Sí, borrar todo",
       cancelButtonText: "Cancelar",
     });
 
     if (confirm.isConfirmed) {
       setCargando(true);
       try {
+        // 1. Limpiar archivo QR del bucket 'qr'
         if (producto.qr_url) {
           const fileName = `qr_${producto.id}.png`;
           await supabase.storage.from("qr").remove([fileName]);
         }
+
+        // 2. Limpiar archivo de FOTO del bucket 'fotos_productos'
+        if (producto.foto_url) {
+          // Extraemos el nombre del archivo de la URL
+          // Supongamos que la URL termina en /fotos_productos/nombre_archivo.webp
+          const urlParts = producto.foto_url.split('/');
+          const fileName = urlParts[urlParts.length - 1];
+          await supabase.storage.from("fotos_productos").remove([fileName]);
+        }
         
+        // 3. Borrar registro de la base de datos
         const { error } = await supabase.from("inventario").delete().eq("id", producto.id);
         if (error) throw error;
 
@@ -271,7 +289,7 @@ export default function InventarioPage() {
         setSelectedIds(selectedIds.filter(id => id !== producto.id));
         cargarInventario();
       } catch (error) {
-        Swal.fire("Error", "No se pudo eliminar el producto.", "error");
+        Swal.fire("Error", "No se pudo eliminar el producto o sus archivos.", "error");
       } finally {
         setCargando(false);
       }
