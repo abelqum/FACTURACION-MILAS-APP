@@ -48,9 +48,7 @@ const CATALOGOS = [
     icono: "✨",
     extraField: "bool",
   },
-  // 🟢 SOLO AGREGA ESTA LÍNEA AQUÍ 👇
   { id: "inventario_medidas", titulo: "Medidas (Pulgadas)", icono: "📐" },
-  // ------------------------------------
   { id: "kits", titulo: "Kits / Ensambles", icono: "🛠️", isCustom: true },
 ];
 
@@ -85,6 +83,19 @@ export default function ConfiguracionPage() {
     descripcion: "",
     componentes: [{ id_producto: "", cantidad_necesaria: 1 }],
   });
+
+  // 🟢 Generador Resistente de la Súper-Línea
+  const getSuperLinea = (p) => {
+    if (!p) return "Producto no identificado";
+    const partes = [];
+    if (p.descripcion) partes.push(p.descripcion);
+    if (p.modelo) partes.push(`Mod: ${p.modelo}`);
+    if (p.condicion?.nombre) partes.push(`Cond: ${p.condicion.nombre}`);
+    if (p.medida_cat?.nombre) partes.push(p.medida_cat.nombre);
+    if (p.marca?.nombre) partes.push(`Marca: ${p.marca.nombre}`);
+    if (p.proveedor?.nombre) partes.push(`Prov: ${p.proveedor.nombre}`);
+    return partes.join(" | ");
+  };
 
   // 1. CARGA INICIAL DE DATOS DE USUARIO
   useEffect(() => {
@@ -134,7 +145,6 @@ export default function ConfiguracionPage() {
     e.preventDefault();
     if (!formCatalogo.nombre.trim()) return;
     try {
-      // 🟢 AQUÍ LE ENSEÑAMOS A GUARDAR EL TOGGLE (bool)
       let payload = { nombre: formCatalogo.nombre };
       if (catalogoActivo.extraField === "enlace")
         payload.enlace = formCatalogo.enlace;
@@ -169,6 +179,7 @@ export default function ConfiguracionPage() {
       Swal.fire("Error", "No se pudo procesar la solicitud.", "error");
     }
   };
+
   const eliminarCatalogo = async (id) => {
     const confirm = await Swal.fire({
       title: "¿Borrar ítem?",
@@ -206,17 +217,27 @@ export default function ConfiguracionPage() {
   // --- LÓGICA DE KITS / ENSAMBLES ---
   const cargarDatosKits = async () => {
     setCargandoCatalogos(true);
+    // 🟢 AQUÍ ACTUALIZAMOS LA CONSULTA PARA TRAER TODO LO DE LA SÚPER-LÍNEA
     const { data: prods } = await supabase
       .from("inventario")
-      .select("id, descripcion, modelo")
+      .select(`
+        id, descripcion, modelo,
+        medida_cat:inventario_medidas(nombre),
+        marca:inventario_marcas(nombre),
+        proveedor:inventario_proveedores(nombre),
+        condicion:inventario_condiciones(nombre)
+      `)
       .eq("es_kit", false)
       .order("descripcion");
+    
     setProductosParaKits(prods || []);
+    
     const { data: kits } = await supabase
       .from("inventario")
       .select("id, descripcion, cantidad, qr_url")
       .eq("es_kit", true)
       .order("descripcion");
+      
     const { data: recetas } = await supabase
       .from("kit_componentes")
       .select("*");
@@ -359,7 +380,6 @@ export default function ConfiguracionPage() {
               .eq("id", comp.id_producto);
           }
         }
-        // 🟢 LIMPIEZA DE BUCKET
         await supabase.storage.from("qr").remove([`qr_${kit.id}.png`]);
         await supabase.from("inventario").delete().eq("id", kit.id);
         cargarDatosKits();
@@ -494,48 +514,60 @@ export default function ConfiguracionPage() {
                     setFormKit({ ...formKit, descripcion: e.target.value })
                   }
                   placeholder="Nombre del Kit..."
-                  className="w-full bg-white border border-slate-800 p-3 rounded-xl text-sm font-bold focus:border-blue-600"
+                  className="w-full bg-white border border-slate-800 p-3 rounded-xl text-sm font-bold focus:border-blue-600 text-slate-800"
                 />
-                <div className="pt-4 space-y-2">
+                <div className="pt-4 space-y-3">
                   <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
                     Componentes:
                   </p>
                   {formKit.componentes.map((comp, i) => (
                     <div
                       key={i}
-                      className="flex gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm"
+                      className="flex justify-between items-start gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm"
                     >
-                      <div className="flex-1 space-y-2">
-                        <select
-                          required
-                          value={comp.id_producto}
-                          onChange={(e) => {
-                            const n = [...formKit.componentes];
-                            n[i].id_producto = e.target.value;
-                            setFormKit({ ...formKit, componentes: n });
-                          }}
-                          className="w-full bg-slate-50 border-none p-1.5 text-xs font-bold"
-                        >
-                          <option value="">Producto...</option>
-                          {productosParaKits.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.descripcion}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          required
-                          type="number"
-                          min="1"
-                          step="0.01"
-                          value={comp.cantidad_necesaria}
-                          onChange={(e) => {
-                            const n = [...formKit.componentes];
-                            n[i].cantidad_necesaria = e.target.value;
-                            setFormKit({ ...formKit, componentes: n });
-                          }}
-                          className="w-full bg-slate-50 border-none p-1 text-slate-800 text-xs font-black text-center"
-                        />
+                      <div className="flex-1 space-y-2 min-w-0">
+                        {/* 🟢 NUEVO CONTENEDOR CON SCROLL HORIZONTAL PARA KITS */}
+                        <div className="w-full overflow-x-auto pb-1 custom-scrollbar">
+                          <select
+                            required
+                            value={comp.id_producto}
+                            onChange={(e) => {
+                              const n = [...formKit.componentes];
+                              n[i].id_producto = e.target.value;
+                              setFormKit({ ...formKit, componentes: n });
+                            }}
+                            className="w-full min-w-max bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-600"
+                          >
+                            <option value="">Selecciona el producto...</option>
+                            {productosParaKits.map((p) => (
+                              <option 
+                                key={p.id} 
+                                value={p.id}
+                                title={getSuperLinea(p)}
+                                className="text-slate-800"
+                              >
+                                {getSuperLinea(p)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Cant. Necesaria:</label>
+                          <input
+                            required
+                            type="number"
+                            min="1"
+                            step="0.01"
+                            value={comp.cantidad_necesaria}
+                            onChange={(e) => {
+                              const n = [...formKit.componentes];
+                              n[i].cantidad_necesaria = e.target.value;
+                              setFormKit({ ...formKit, componentes: n });
+                            }}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 text-xs font-black focus:outline-none focus:border-blue-600"
+                          />
+                        </div>
                       </div>
                       <button
                         type="button"
@@ -544,7 +576,7 @@ export default function ConfiguracionPage() {
                           n.splice(i, 1);
                           setFormKit({ ...formKit, componentes: n });
                         }}
-                        className="text-slate-300 hover:text-red-500 p-1"
+                        className="text-slate-300 hover:text-red-500 p-2 shrink-0 bg-slate-50 rounded-lg border border-slate-200"
                       >
                         <MinusCircle size={16} />
                       </button>
@@ -561,14 +593,14 @@ export default function ConfiguracionPage() {
                         ],
                       })
                     }
-                    className="w-full py-2 bg-white text-blue-600 rounded-xl font-bold text-[10px] uppercase border border-dashed border-blue-200"
+                    className="w-full py-2 bg-white text-blue-600 rounded-xl font-bold text-[10px] uppercase border border-dashed border-blue-200 mt-2"
                   >
                     + Agregar Componente
                   </button>
                 </div>
                 <button
                   type="submit"
-                  className="w-full py-3 bg-blue-700 text-white rounded-xl font-black text-xs uppercase hover:bg-blue-800 shadow-lg shadow-blue-700/20"
+                  className="w-full py-3 bg-blue-700 text-white rounded-xl font-black text-xs uppercase hover:bg-blue-800 shadow-lg shadow-blue-700/20 mt-4"
                 >
                   {editandoCatId ? "Actualizar Kit" : "Crear Kit"}
                 </button>
@@ -583,7 +615,7 @@ export default function ConfiguracionPage() {
                     setFormCatalogo({ ...formCatalogo, nombre: e.target.value })
                   }
                   placeholder="Nombre..."
-                  className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold"
+                  className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm font-bold text-slate-800"
                 />
 
                 {catalogoActivo.extraField === "enlace" && (
@@ -597,7 +629,7 @@ export default function ConfiguracionPage() {
                       })
                     }
                     placeholder="Enlace Maps/Tienda..."
-                    className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm"
+                    className="w-full bg-white border border-slate-300 p-3 rounded-xl text-sm text-slate-800"
                   />
                 )}
 

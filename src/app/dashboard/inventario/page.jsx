@@ -23,6 +23,7 @@ import {
   PackageMinus,
   Wrench,
   Copy,
+  Image as ImageIcon
 } from "lucide-react";
 
 import ModalAjusteStock from "@/app/_components/ModalAjusteStock";
@@ -143,7 +144,6 @@ export default function InventarioPage() {
   };
 
   // 🟢 BORRADO MASIVO
- // 🟢 BORRADO MASIVO
   const eliminarSeleccionados = async () => {
     if (selectedIds.length === 0) return;
 
@@ -170,6 +170,8 @@ export default function InventarioPage() {
             const fileName = `qr_${producto.id}.png`;
             await supabase.storage.from("qr").remove([fileName]);
           }
+          // Nota: Si borramos el producto, no es estrictamente necesario borrar la foto de `fotos_productos` 
+          // a menos que quieras liberar espacio. Por seguridad de historial solemos dejar la foto viva.
 
           const { error } = await supabase.from("inventario").delete().eq("id", id);
           if (!error) borrados++;
@@ -189,6 +191,7 @@ export default function InventarioPage() {
       cargarInventario();
     }
   };
+
   const duplicarProducto = async (p) => {
     const confirm = await Swal.fire({
       title: "¿Duplicar producto?",
@@ -216,6 +219,7 @@ export default function InventarioPage() {
           stock_minimo: p.stock_minimo || 1,
           cantidad: 0,
           es_kit: p.es_kit || false,
+          foto_url: p.foto_url || null, // 🟢 Clonar también la URL de la foto
         };
 
         const { data: nuevo, error } = await supabase.from("inventario").insert([nuevoProducto]).select().single();
@@ -240,7 +244,7 @@ export default function InventarioPage() {
     }
   };
 
- // 🟢 BORRADO INDIVIDUAL
+  // 🟢 BORRADO INDIVIDUAL
   const eliminarProducto = async (producto) => {
     const confirm = await Swal.fire({
       title: "¿Eliminar Producto?",
@@ -274,7 +278,7 @@ export default function InventarioPage() {
     }
   };
 
-  // ... (armarKit, desarmarKit y generarCatalogoPDF se mantienen igual)
+  // ... (armarKit y desarmarKit se mantienen igual)
   const armarKit = async (kit) => {
     Swal.fire({ title: "Verificando stock...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
@@ -329,10 +333,11 @@ export default function InventarioPage() {
 
   const generarCatalogoPDF = async () => {
     if (inventarioFiltrado.length === 0) return Swal.fire("Atención", "No hay productos en la lista.", "warning");
-    Swal.fire({ title: "Generando catálogo...", text: "Procesando códigos QR...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: "Generando catálogo...", text: "Procesando imágenes y códigos...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
+      
       const convertirImagenABase64 = (url) =>
         new Promise((resolve) => {
           if (!url) return resolve(null);
@@ -350,7 +355,11 @@ export default function InventarioPage() {
           img.src = url;
         });
 
-      const imagenesQR = await Promise.all(inventarioFiltrado.map((p) => convertirImagenABase64(p.qr_url)));
+      // 🟢 Ahora intentamos descargar la FOTO primero, si no tiene, bajamos el QR
+      const imagenesBase64 = await Promise.all(
+        inventarioFiltrado.map((p) => convertirImagenABase64(p.foto_url || p.qr_url))
+      );
+
       const columnas = 4; const filas = 2; const itemsPorPagina = columnas * filas;
       const cardWidth = 65; const cardHeight = 85; const marginX = 10; const marginY = 20; const espacioX = 68; const espacioY = 92;
 
@@ -359,9 +368,9 @@ export default function InventarioPage() {
         if (i % itemsPorPagina === 0) {
           if (i > 0) doc.addPage();
           doc.setFont("helvetica", "bold"); doc.setFontSize(18);
-          doc.text("CATÁLOGO DE INVENTARIO - MILAS", pageWidth / 2, 12, { align: "center" });
+          doc.text("CATÁLOGO COMERCIAL - MILAS", pageWidth / 2, 12, { align: "center" });
           doc.setFontSize(9); doc.setTextColor(120);
-          doc.text(`Total de productos: ${inventarioFiltrado.length}`, pageWidth / 2, 18, { align: "center" });
+          doc.text(`Total de equipos/productos: ${inventarioFiltrado.length}`, pageWidth / 2, 18, { align: "center" });
           doc.setTextColor(0);
         }
         const indexPagina = i % itemsPorPagina;
@@ -375,19 +384,23 @@ export default function InventarioPage() {
         doc.setFont("helvetica", "normal"); doc.setFontSize(8);
         doc.text(`Modelo: ${producto.modelo || "N/A"}`, x + 3, y + 18);
         doc.text(`Marca: ${producto.marca?.nombre || "N/A"}`, x + 3, y + 23);
-        doc.text(`Cantidad: ${producto.cantidad}`, x + 3, y + 28);
+        doc.text(`Stock: ${producto.cantidad}`, x + 3, y + 28);
 
-        const qrBase64 = imagenesQR[i];
-        if (qrBase64) {
-          try { doc.addImage(qrBase64, "JPEG", x + 12, y + 33, 40, 40); } catch (err) { doc.setFontSize(7); doc.text("QR no disponible", x + 18, y + 55); }
+        const imgBase64 = imagenesBase64[i];
+        if (imgBase64) {
+          try { 
+            doc.addImage(imgBase64, "JPEG", x + 12, y + 33, 40, 40); 
+          } catch (err) { 
+            doc.setFontSize(7); doc.text("Imagen no disponible", x + 18, y + 55); 
+          }
         } else {
-          doc.setFontSize(7); doc.text("QR no disponible", x + 18, y + 55);
+          doc.setFontSize(7); doc.text("Sin Imagen", x + 18, y + 55);
         }
         doc.setFontSize(7); doc.setTextColor(120); doc.text(`ID: ${producto.id}`, x + 3, y + 80); doc.setTextColor(0);
       }
       doc.save("Catalogo_MILAS.pdf");
       Swal.close();
-      Swal.fire("¡Listo!", "El catálogo PDF se generó correctamente.", "success");
+      Swal.fire("¡Listo!", "El catálogo comercial PDF se generó correctamente.", "success");
     } catch (error) {
       Swal.close();
       Swal.fire("Error", "Hubo un fallo generando el PDF.", "error");
@@ -412,7 +425,6 @@ export default function InventarioPage() {
   const inventarioPaginado = inventarioFiltrado.slice((paginaActual - 1) * itemsPorPagina, paginaActual * itemsPorPagina);
   const valorTotalInventario = inventarioFiltrado.reduce((acc, p) => acc + Number(p.cantidad) * Number(p.precio_unitario), 0);
 
-  // Variable para saber si todos los de la página están seleccionados
   const isAllSelectedOnPage = inventarioPaginado.length > 0 && inventarioPaginado.every(p => selectedIds.includes(p.id));
 
   return (
@@ -437,7 +449,6 @@ export default function InventarioPage() {
         </div>
         
         <div className="flex gap-2 w-full xl:w-auto shrink-0 flex-wrap">
-          {/* 🟢 BOTÓN DE BORRADO MASIVO (Solo aparece si hay seleccionados) */}
           {selectedIds.length > 0 && (
             <button
               onClick={eliminarSeleccionados}
@@ -451,13 +462,13 @@ export default function InventarioPage() {
             onClick={generarCatalogoPDF}
             className="flex-1 xl:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors shadow-sm"
           >
-            <FileText size={16} /> PDF
+            <FileText size={16} /> Catálogo PDF
           </button>
           <button
             onClick={() => setIsModalScannerOpen(true)}
             className="flex-1 xl:flex-none bg-slate-800 text-white px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-900 transition-colors shadow-sm"
           >
-            <ScanLine size={16} /> Escanear
+            <ScanLine size={16} /> Escanear QR
           </button>
           <button
             onClick={() => {
@@ -485,7 +496,6 @@ export default function InventarioPage() {
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
               <tr>
-                {/* 🟢 CHECKBOX MAESTRO */}
                 <th className="p-4 w-12 text-center">
                   <input 
                     type="checkbox" 
@@ -522,7 +532,6 @@ export default function InventarioPage() {
                       key={p.id}
                       className={`transition-colors ${isSelected ? "bg-blue-50/50" : p.es_kit ? "bg-indigo-50/20 hover:bg-indigo-50/50" : "hover:bg-slate-50"}`}
                     >
-                      {/* 🟢 CHECKBOX INDIVIDUAL */}
                       <td className="p-4 text-center">
                         <input 
                           type="checkbox" 
@@ -533,16 +542,48 @@ export default function InventarioPage() {
                       </td>
                       <td className="p-4">
                         <div className="font-bold text-slate-800 flex items-center gap-3">
-                          {p.qr_url ? (
-                            <div onClick={() => { setProductoScanner(p); setIsModalAjusteOpen(true); }} className="group relative cursor-pointer shrink-0">
-                              <img src={p.qr_url} alt="QR" className="w-12 h-12 border border-slate-200 rounded-xl shadow-sm object-contain bg-white group-hover:scale-105 transition-transform" />
-                              <div className="absolute inset-0 bg-blue-900/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                            </div>
-                          ) : (
-                            <div className="w-12 h-12 bg-slate-100 flex items-center justify-center rounded-xl border border-slate-200 shrink-0">
-                              {p.es_kit ? <Wrench className="text-slate-400" size={16} /> : <QrCode className="text-slate-300" size={16} />}
-                            </div>
-                          )}
+                          
+                          {/* 🟢 AVATAR DEL PRODUCTO (FOTO O QR) CON VISTA PREVIA FLOTANTE */}
+                          <div 
+                            onClick={() => { setProductoScanner(p); setIsModalAjusteOpen(true); }} 
+                            className="group relative cursor-pointer shrink-0"
+                          >
+                            {p.foto_url ? (
+                              <img src={p.foto_url} alt="Prod" className="w-12 h-12 border border-slate-200 rounded-xl shadow-sm object-cover bg-white" />
+                            ) : p.qr_url ? (
+                              <img src={p.qr_url} alt="QR" className="w-12 h-12 border border-slate-200 rounded-xl shadow-sm object-contain bg-white p-1" />
+                            ) : (
+                              <div className="w-12 h-12 bg-slate-100 flex items-center justify-center rounded-xl border border-slate-200">
+                                {p.es_kit ? <Wrench className="text-slate-400" size={16} /> : <ImageIcon className="text-slate-300" size={16} />}
+                              </div>
+                            )}
+
+                            {/* Tooltip de Imagen Inversa (Muestra el QR si hay foto, o la foto si se muestra el QR, si ambas existen) */}
+                            {(p.foto_url || p.qr_url) && (
+                              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-xl">
+                                <div className="bg-white p-2 rounded-2xl border border-slate-200 flex flex-col items-center gap-2 w-32">
+                                  {p.foto_url && p.qr_url ? (
+                                    <>
+                                      <img src={p.qr_url} className="w-24 h-24 object-contain" />
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center w-full border-t border-slate-100 pt-2">Escanear QR</span>
+                                    </>
+                                  ) : p.qr_url ? (
+                                    <>
+                                      <img src={p.qr_url} className="w-24 h-24 object-contain" />
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center w-full border-t border-slate-100 pt-2">Escanear QR</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <img src={p.foto_url} className="w-24 h-24 object-cover rounded-xl" />
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center w-full border-t border-slate-100 pt-2">Foto de Producto</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Detalles Texto */}
                           <div>
                             <p className="whitespace-normal min-w-[180px] max-w-[250px] leading-tight mb-1 flex items-center gap-2">
                               {p.es_kit && <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[9px] uppercase tracking-widest shrink-0">KIT</span>}
@@ -553,6 +594,7 @@ export default function InventarioPage() {
                               {!p.es_kit && <span className="text-[10px] text-slate-500">Mod: {p.modelo || "N/A"} • {p.marca?.nombre}</span>}
                             </div>
                           </div>
+
                         </div>
                       </td>
                       <td className="p-4">

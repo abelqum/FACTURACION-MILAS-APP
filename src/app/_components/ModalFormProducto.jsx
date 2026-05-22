@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import Swal from "sweetalert2";
 import QRCode from "qrcode";
-import { X, Save, Edit3 } from "lucide-react";
+import { X, Save, Image as ImageIcon, UploadCloud, Camera } from "lucide-react";
 
 export default function ModalFormProducto({
   isOpen,
@@ -14,6 +14,10 @@ export default function ModalFormProducto({
 }) {
   const [cargando, setCargando] = useState(false);
   const [aplicaMedida, setAplicaMedida] = useState(false);
+
+  // 🟢 ESTADOS PARA LA FOTO
+  const [fotoArchivo, setFotoArchivo] = useState(null);
+  const [fotoPreview, setFotoPreview] = useState(null);
 
   const [form, setForm] = useState({
     modelo: "",
@@ -29,6 +33,7 @@ export default function ModalFormProducto({
     id_categoria: "",
     id_proveedor: "",
     id_medida: "",
+    foto_url: "",
   });
 
   useEffect(() => {
@@ -48,7 +53,10 @@ export default function ModalFormProducto({
         id_categoria: productoEdicion.id_categoria || "",
         id_proveedor: productoEdicion.id_proveedor || "",
         id_medida: productoEdicion.id_medida || "",
+        foto_url: productoEdicion.foto_url || "",
       });
+      setFotoPreview(productoEdicion.foto_url || null);
+      setFotoArchivo(null);
     } else {
       setAplicaMedida(false);
       setForm({
@@ -65,16 +73,49 @@ export default function ModalFormProducto({
         id_categoria: "",
         id_proveedor: "",
         id_medida: "",
+        foto_url: "",
       });
+      setFotoPreview(null);
+      setFotoArchivo(null);
     }
   }, [productoEdicion, isOpen]);
 
   if (!isOpen) return null;
 
+  // 🟢 MANEJADOR DE LA SELECCIÓN DE IMAGEN / CÁMARA
+  const handleFotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setFotoArchivo(file);
+      setFotoPreview(URL.createObjectURL(file)); // Crea una vista previa temporal
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setCargando(true);
     try {
+      let finalFotoUrl = form.foto_url;
+
+      // 🟢 1. SUBIR LA FOTO AL BUCKET (SI SE SELECCIONÓ UNA NUEVA)
+      if (fotoArchivo) {
+        const fileExt = fotoArchivo.name.split('.').pop();
+        const fileName = `prod_${Date.now()}.${fileExt}`;
+
+        const { error: upErr } = await supabase.storage
+          .from("fotos_productos")
+          .upload(fileName, fotoArchivo, { upsert: true });
+
+        if (upErr) throw new Error(`Error subiendo foto: ${upErr.message}`);
+
+        const { data: urlData } = supabase.storage
+          .from("fotos_productos")
+          .getPublicUrl(fileName);
+
+        finalFotoUrl = urlData.publicUrl;
+      }
+
+      // 2. PREPARAR EL PAYLOAD
       const payloadLimpio = {};
       for (const key in form) {
         if (form[key] === "") {
@@ -84,24 +125,17 @@ export default function ModalFormProducto({
         }
       }
 
-      if (!aplicaMedida) {
-        payloadLimpio.id_medida = null;
-      }
+      if (!aplicaMedida) payloadLimpio.id_medida = null;
+      payloadLimpio.foto_url = finalFotoUrl; // Asignamos la URL final de la foto
 
+      // 3. GUARDAR EN BASE DE DATOS
       if (productoEdicion) {
         const { error } = await supabase
           .from("inventario")
           .update(payloadLimpio)
           .eq("id", productoEdicion.id);
         if (error) throw error;
-        Swal.fire({
-          icon: "success",
-          title: "Actualizado",
-          toast: true,
-          position: "top-end",
-          timer: 2000,
-          showConfirmButton: false,
-        });
+        Swal.fire({ icon: "success", title: "Actualizado", toast: true, position: "top-end", timer: 2000, showConfirmButton: false });
       } else {
         // CREAR NUEVO
         const { data: nuevo, error } = await supabase
@@ -112,46 +146,23 @@ export default function ModalFormProducto({
 
         if (error) throw error;
 
-        // 🟢 NUEVA LÓGICA DE GENERACIÓN Y SUBIDA DE QR MÁS SEGURA
+        // GENERACIÓN DE QR
         try {
-          // 1. Generamos el QR asegurando que el ID sea texto
-          const qrDataUrl = await QRCode.toDataURL(String(nuevo.id), {
-            width: 300,
-          });
-
-          // 2. Convertimos a Blob de forma nativa (más seguro que usar atob)
+          const qrDataUrl = await QRCode.toDataURL(String(nuevo.id), { width: 300 });
           const resBlob = await fetch(qrDataUrl);
           const blob = await resBlob.blob();
-
           const fileName = `qr_${nuevo.id}.png`;
 
-          // 3. Subimos a Supabase Storage con upsert (por si acaso)
-          const { error: upErr } = await supabase.storage
+          const { error: qrErr } = await supabase.storage
             .from("qr")
-            .upload(fileName, blob, {
-              contentType: "image/png",
-              upsert: true,
-            });
+            .upload(fileName, blob, { contentType: "image/png", upsert: true });
 
-          if (upErr) {
-            console.error("Error subiendo al bucket:", upErr);
-            throw new Error(
-              `El producto se creó, pero el QR falló: ${upErr.message}`,
-            );
-          }
+          if (qrErr) throw new Error(qrErr.message);
 
-          // 4. Obtenemos URL pública y actualizamos el inventario
-          const { data: urlData } = supabase.storage
-            .from("qr")
-            .getPublicUrl(fileName);
-
-          await supabase
-            .from("inventario")
-            .update({ qr_url: urlData.publicUrl })
-            .eq("id", nuevo.id);
+          const { data: urlData } = supabase.storage.from("qr").getPublicUrl(fileName);
+          await supabase.from("inventario").update({ qr_url: urlData.publicUrl }).eq("id", nuevo.id);
         } catch (qrError) {
-          // Si falla el QR, le avisamos al usuario pero no detenemos todo
-          Swal.fire("Advertencia", qrError.message, "warning");
+          Swal.fire("Advertencia", `Producto creado pero falló QR: ${qrError.message}`, "warning");
         }
 
         Swal.fire("Éxito", "Producto registrado correctamente.", "success");
@@ -172,15 +183,42 @@ export default function ModalFormProducto({
           <h3 className="font-black text-slate-800 text-lg">
             {productoEdicion ? "Editar Producto" : "Nuevo Producto"}
           </h3>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-red-500 rounded-xl transition-all"
-          >
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-red-500 rounded-xl transition-all">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
+          
+          {/* 🟢 SECCIÓN DE LA FOTO DEL PRODUCTO ACTUALIZADA */}
+          <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
+            <div className="w-32 h-32 shrink-0 bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center shadow-sm">
+              {fotoPreview ? (
+                <img src={fotoPreview} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <ImageIcon className="text-slate-300" size={40} />
+              )}
+            </div>
+            <div className="flex-1 w-full text-center sm:text-left">
+              <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-1">Fotografía del Producto</h4>
+              <p className="text-xs text-slate-500 mb-3">Sube una imagen o toma una foto clara para identificarlo visualmente en almacén.</p>
+              
+              <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                {/* Botón de Archivo Normal */}
+                <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all cursor-pointer">
+                  <UploadCloud size={16} /> {fotoPreview ? "Cambiar Archivo" : "Subir Archivo"}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
+                </label>
+
+                {/* 🟢 NUEVO BOTÓN DE CÁMARA */}
+                <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer">
+                  <Camera size={16} /> Tomar Foto
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoChange} />
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="md:col-span-2">
               <label className="block text-[11px] font-black text-slate-800 uppercase tracking-widest mb-1.5">
@@ -190,9 +228,7 @@ export default function ModalFormProducto({
                 required
                 type="text"
                 value={form.descripcion}
-                onChange={(e) =>
-                  setForm({ ...form, descripcion: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
                 className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               />
             </div>
@@ -215,9 +251,7 @@ export default function ModalFormProducto({
               <select
                 required
                 value={form.id_categoria}
-                onChange={(e) =>
-                  setForm({ ...form, id_categoria: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, id_categoria: e.target.value })}
                 className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona...</option>
@@ -272,9 +306,7 @@ export default function ModalFormProducto({
               <select
                 required
                 value={form.id_proveedor}
-                onChange={(e) =>
-                  setForm({ ...form, id_proveedor: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, id_proveedor: e.target.value })}
                 className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona el Proveedor...</option>
@@ -286,8 +318,7 @@ export default function ModalFormProducto({
               </select>
             </div>
 
-            {/* 🟢 SECCIÓN DE MEDIDA MEJORADA: Fija y con estado visual bloqueado */}
-            <div className="md:col-span-3  bg-blue-50/50 p-3 border border-blue-100 rounded-xl flex flex-col items-center justify-center gap-4 transition-all">
+            <div className="md:col-span-3 bg-blue-50/50 p-3 border border-blue-100 rounded-xl flex flex-col items-center justify-center gap-4 transition-all">
               <label className="flex items-center gap-2 cursor-pointer shrink-0">
                 <input
                   type="checkbox"
@@ -306,9 +337,7 @@ export default function ModalFormProducto({
                 required={aplicaMedida}
                 disabled={!aplicaMedida}
                 value={form.id_medida}
-                onChange={(e) =>
-                  setForm({ ...form, id_medida: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, id_medida: e.target.value })}
                 className={`flex-1 text-slate-800 bg-white border border-blue-200 p-2 rounded-lg text-sm font-bold shadow-sm transition-all
                   ${!aplicaMedida ? "opacity-30 bg-slate-100 border-slate-200 cursor-not-allowed" : "opacity-100 focus:outline-none focus:border-blue-600"}`}
               >
@@ -328,9 +357,7 @@ export default function ModalFormProducto({
               <select
                 required
                 value={form.id_almacen}
-                onChange={(e) =>
-                  setForm({ ...form, id_almacen: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, id_almacen: e.target.value })}
                 className="w-full bg-slate-50 border text-slate-800 border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona...</option>
@@ -359,23 +386,18 @@ export default function ModalFormProducto({
               <select
                 required
                 value={form.id_condicion}
-                onChange={(e) =>
-                  setForm({ ...form, id_condicion: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, id_condicion: e.target.value })}
                 className="w-full text-slate-800 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-600 transition-all"
               >
                 <option value="">Selecciona...</option>
                 {catalogos.condiciones?.map((cond) => (
-                  <option
-                    key={cond.id}
-                    value={cond.id}
-                    className="text-slate-800"
-                  >
+                  <option key={cond.id} value={cond.id} className="text-slate-800">
                     {cond.nombre}
                   </option>
                 ))}
               </select>
             </div>
+
             <div>
               <label className="block text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-1.5">
                 Costo Unitario *
@@ -385,9 +407,7 @@ export default function ModalFormProducto({
                 type="number"
                 step="0.01"
                 value={form.precio_unitario}
-                onChange={(e) =>
-                  setForm({ ...form, precio_unitario: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, precio_unitario: e.target.value })}
                 className="w-full bg-emerald-50/50 border text-slate-800 border-emerald-200 p-3 rounded-xl text-sm font-black focus:outline-none focus:border-emerald-600 transition-all"
               />
             </div>
@@ -411,9 +431,7 @@ export default function ModalFormProducto({
                 required
                 type="number"
                 value={form.stock_minimo}
-                onChange={(e) =>
-                  setForm({ ...form, stock_minimo: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, stock_minimo: e.target.value })}
                 className="w-full text-slate-800 bg-red-50 border border-red-200 p-3 rounded-xl text-sm font-black focus:outline-none focus:border-red-600 transition-all"
               />
             </div>
@@ -430,9 +448,9 @@ export default function ModalFormProducto({
             <button
               type="submit"
               disabled={cargando}
-              className="px-8 py-3 bg-slate-800 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg active:scale-95 disabled:opacity-50 transition-all"
+              className="px-8 py-3 bg-slate-800 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-lg active:scale-95 disabled:opacity-50 transition-all flex items-center gap-2"
             >
-              {cargando ? "Guardando..." : "Guardar Producto"}
+              {cargando ? "Guardando..." : "Guardar Producto"} <Save size={16} />
             </button>
           </div>
         </form>
