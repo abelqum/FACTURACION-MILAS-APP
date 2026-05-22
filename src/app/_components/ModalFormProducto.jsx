@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import Swal from "sweetalert2";
 import QRCode from "qrcode";
-import { X, Save, Image as ImageIcon, UploadCloud } from "lucide-react";
+import { X, Save, Image as ImageIcon, UploadCloud, Camera } from "lucide-react";
 
 export default function ModalFormProducto({
   isOpen,
@@ -82,7 +82,7 @@ export default function ModalFormProducto({
 
   if (!isOpen) return null;
 
-  // 🟢 MANEJADOR DE LA SELECCIÓN DE IMAGEN
+  // 🟢 MANEJADOR DE LA SELECCIÓN DE IMAGEN / CÁMARA
   const handleFotoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -91,7 +91,62 @@ export default function ModalFormProducto({
     }
   };
 
-const handleSubmit = async (e) => {
+  // 🟢 MOTOR DE OPTIMIZACIÓN DE IMÁGENES (ESTA ERA LA FUNCIÓN QUE FALTABA)
+  const optimizarImagen = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 800; // Resolución ideal
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          // Cálculo para mantener la proporción de la imagen
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convierte a WebP con calidad del 80%
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const optimizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".webp"), {
+                  type: "image/webp",
+                });
+                resolve(optimizedFile);
+              } else {
+                reject(new Error("Error al procesar la imagen."));
+              }
+            },
+            "image/webp",
+            0.8
+          );
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setCargando(true);
     try {
@@ -208,7 +263,7 @@ const handleSubmit = async (e) => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 custom-scrollbar">
           
           {/* 🟢 SECCIÓN DE LA FOTO DEL PRODUCTO */}
           <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
@@ -221,11 +276,19 @@ const handleSubmit = async (e) => {
             </div>
             <div className="flex-1 w-full text-center sm:text-left">
               <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-1">Fotografía del Producto</h4>
-              <p className="text-xs text-slate-500 mb-3">Sube una imagen clara para identificarlo visualmente en almacén.</p>
-              <label className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all cursor-pointer">
-                <UploadCloud size={16} /> {fotoPreview ? "Cambiar Imagen" : "Seleccionar Archivo"}
-                <input type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
-              </label>
+              <p className="text-xs text-slate-500 mb-3">Sube una imagen o toma una foto clara para identificarlo visualmente en almacén.</p>
+              
+              <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all cursor-pointer">
+                  <UploadCloud size={16} /> {fotoPreview ? "Cambiar Archivo" : "Subir Archivo"}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
+                </label>
+
+                <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 font-bold text-xs uppercase tracking-widest rounded-xl border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer">
+                  <Camera size={16} /> Tomar Foto
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoChange} />
+                </label>
+              </div>
             </div>
           </div>
 
