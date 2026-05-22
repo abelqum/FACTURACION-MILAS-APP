@@ -1,3 +1,4 @@
+
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
@@ -23,7 +24,7 @@ export default function ModalMovimiento({
 }) {
   const [cargando, setCargando] = useState(false);
 
-  // 🟢 ESTADO DE CABECERA
+
   const [cabecera, setCabecera] = useState({
     tipo: "entrada",
     es_importacion: false,
@@ -33,7 +34,6 @@ export default function ModalMovimiento({
     porcentaje_importacion: 40.0,
   });
 
-  // 🟢 ESTADO DE PARTIDAS
   const [detalles, setDetalles] = useState([
     { id_producto: "", cantidad: 1, precio_unitario: 0 },
   ]);
@@ -72,7 +72,7 @@ export default function ModalMovimiento({
 
   if (!isOpen) return null;
 
-  // 🟢 LÓGICA MATEMÁTICA
+
   const subtotalOriginal = detalles.reduce(
     (acc, det) => acc + Number(det.cantidad) * Number(det.precio_unitario),
     0,
@@ -92,7 +92,7 @@ export default function ModalMovimiento({
     totalMXN = subtotalOriginal + iva;
   }
 
-  // 🟢 MANEJO DE FILAS
+
   const agregarFila = () =>
     setDetalles([
       ...detalles,
@@ -105,7 +105,7 @@ export default function ModalMovimiento({
     setDetalles(nuevos);
   };
 
-  // 🟢 FUNCIÓN DE GUARDADO
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -206,20 +206,28 @@ export default function ModalMovimiento({
             subtotal: subtotalFila,
           },
         ]);
-        // ... dentro del bucle de detalles ...
 
-        // 1. Buscamos si la condición del producto permite actualizar precio
+       
         const { data: prodInfo } = await supabase
           .from("inventario")
           .select(
-            "id_condicion, inventario_condiciones(permite_actualizar_precio)",
+            "cantidad, id_condicion, inventario_condiciones(permite_actualizar_precio)",
           )
           .eq("id", det.id_producto)
           .single();
 
+      
+        let nuevaCantidad = Number(prodInfo.cantidad);
+        if (cabecera.tipo === "entrada") {
+          nuevaCantidad += Number(det.cantidad);
+        } else {
+          nuevaCantidad -= Number(det.cantidad);
+        }
+
         const puedeActualizarPrecio =
           prodInfo?.inventario_condiciones?.permite_actualizar_precio;
 
+        // Armamos el paquete de datos a actualizar en la tabla Inventario
         const updatePayload = { cantidad: nuevaCantidad };
 
         // Solo si es Entrada Y la condición lo permite, actualizamos el precio
@@ -243,6 +251,7 @@ export default function ModalMovimiento({
           );
         }
 
+        // Ejecutamos la actualización final del inventario
         await supabase
           .from("inventario")
           .update(updatePayload)
@@ -271,16 +280,12 @@ export default function ModalMovimiento({
   };
 
   // 🟢 Generador Resistente de la Súper-Línea
-  // 🟢 Generador Resistente de la Súper-Línea
   const getSuperLinea = (p) => {
     if (!p) return "Producto no identificado";
     const partes = [];
     if (p.descripcion) partes.push(p.descripcion);
     if (p.modelo) partes.push(`Mod: ${p.modelo}`);
-
-    // 🟢 NUEVO: Agregamos la Condición a la Súper-Línea
     if (p.condicion?.nombre) partes.push(`Cond: ${p.condicion.nombre}`);
-
     if (p.medida_cat?.nombre) partes.push(p.medida_cat.nombre);
     if (p.marca?.nombre) partes.push(`Marca: ${p.marca.nombre}`);
     if (p.proveedor?.nombre) partes.push(`Prov: ${p.proveedor.nombre}`);
@@ -315,7 +320,7 @@ export default function ModalMovimiento({
 
         <form
           onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto p-6 space-y-6"
+          className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
         >
           {/* SECCIÓN 1: CABECERA */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -447,7 +452,7 @@ export default function ModalMovimiento({
                   key={index}
                   className="flex flex-col lg:flex-row gap-3 items-start lg:items-center bg-slate-50 p-3 rounded-xl border border-slate-200"
                 >
-                  <div className=" w-full">
+                  <div className=" w-full overflow-x-auto custom-scrollbar pb-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
                       Buscar Producto
                     </label>
@@ -457,11 +462,11 @@ export default function ModalMovimiento({
                       onChange={(e) =>
                         actualizarDetalle(index, "id_producto", e.target.value)
                       }
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 focus:border-blue-600 outline-none"
+                      className="w-full min-w-max p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 focus:border-blue-600 outline-none"
                     >
                       <option value="">Selecciona el producto...</option>
                       {productos?.map((p) => (
-                        <option key={p.id} value={p.id}>
+                        <option key={p.id} value={p.id} title={getSuperLinea(p)}>
                           {getSuperLinea(p)}
                         </option>
                       ))}
@@ -469,7 +474,7 @@ export default function ModalMovimiento({
                   </div>
 
                   <div className="flex gap-3 w-full lg:w-auto">
-                    <div className="w-24">
+                    <div className="w-24 shrink-0">
                       <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
                         Cant.
                       </label>
@@ -485,7 +490,7 @@ export default function ModalMovimiento({
                         className="w-full p-2 text-slate-800 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center focus:border-blue-600 outline-none"
                       />
                     </div>
-                    <div className="w-32">
+                    <div className="w-32 shrink-0">
                       <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
                         {cabecera.es_importacion ? (
                           <DollarSign size={10} />
@@ -512,7 +517,7 @@ export default function ModalMovimiento({
                       type="button"
                       onClick={() => quitarFila(index)}
                       disabled={detalles.length === 1}
-                      className="mt-5 p-2 text-slate-300 hover:text-red-500 bg-white border border-slate-200 rounded-lg disabled:opacity-30"
+                      className="mt-5 p-2 shrink-0 text-slate-300 hover:text-red-500 bg-white border border-slate-200 rounded-lg disabled:opacity-30"
                     >
                       <Trash2 size={16} />
                     </button>
