@@ -91,20 +91,37 @@ export default function ModalFormProducto({
     }
   };
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     setCargando(true);
     try {
       let finalFotoUrl = form.foto_url;
 
-      // 🟢 1. SUBIR LA FOTO AL BUCKET (SI SE SELECCIONÓ UNA NUEVA)
+      // 🟢 1. LÓGICA DE ACTUALIZACIÓN: SI HAY FOTO NUEVA, BORRAR LA VIEJA Y SUBIR LA NUEVA
       if (fotoArchivo) {
-        const fileExt = fotoArchivo.name.split('.').pop();
-        const fileName = `prod_${Date.now()}.${fileExt}`;
+        Swal.fire({ title: "Optimizando y subiendo imagen...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        // Si ya existía una foto previa, la eliminamos del bucket para no dejar basura
+        if (form.foto_url) {
+          try {
+            const urlParts = form.foto_url.split('/');
+            const oldFileName = urlParts[urlParts.length - 1];
+            await supabase.storage.from("fotos_productos").remove([oldFileName]);
+          } catch (err) {
+            console.error("No se pudo eliminar la imagen vieja, pero continuamos:", err);
+          }
+        }
+        
+        // Ahora optimizamos y subimos la nueva
+        const optimizedFile = await optimizarImagen(fotoArchivo);
+        const fileName = `prod_${Date.now()}.webp`;
 
         const { error: upErr } = await supabase.storage
           .from("fotos_productos")
-          .upload(fileName, fotoArchivo, { upsert: true });
+          .upload(fileName, optimizedFile, { 
+            contentType: "image/webp",
+            upsert: true 
+          });
 
         if (upErr) throw new Error(`Error subiendo foto: ${upErr.message}`);
 
@@ -113,6 +130,7 @@ export default function ModalFormProducto({
           .getPublicUrl(fileName);
 
         finalFotoUrl = urlData.publicUrl;
+        Swal.close(); // Cerramos el modal de carga de imagen
       }
 
       // 2. PREPARAR EL PAYLOAD
@@ -126,10 +144,11 @@ export default function ModalFormProducto({
       }
 
       if (!aplicaMedida) payloadLimpio.id_medida = null;
-      payloadLimpio.foto_url = finalFotoUrl; // Asignamos la URL final de la foto
+      payloadLimpio.foto_url = finalFotoUrl;
 
       // 3. GUARDAR EN BASE DE DATOS
       if (productoEdicion) {
+        // ACTUALIZAR
         const { error } = await supabase
           .from("inventario")
           .update(payloadLimpio)
@@ -170,6 +189,7 @@ export default function ModalFormProducto({
       onGuardado();
       onClose();
     } catch (error) {
+      Swal.close(); // Cerramos si hubo error durante la carga de SweetAlert
       Swal.fire("Error", error.message, "error");
     } finally {
       setCargando(false);
