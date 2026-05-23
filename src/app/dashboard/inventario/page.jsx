@@ -4,6 +4,7 @@ import { supabase } from "@/app/_lib/supabase/supabase";
 import Swal from "sweetalert2";
 import QRCode from "qrcode";
 import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable'; // 🟢 Importación para el nuevo reporte de tabla
 import {
   Plus,
   QrCode,
@@ -23,7 +24,8 @@ import {
   PackageMinus,
   Wrench,
   Copy,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Table // 🟢 Ícono para el nuevo botón
 } from "lucide-react";
 
 import ModalAjusteStock from "@/app/_components/ModalAjusteStock";
@@ -165,7 +167,7 @@ export default function InventarioPage() {
         const producto = inventario.find(p => p.id === id);
         if (!producto) continue;
 
-   try {
+      try {
           // Limpiar QR
           if (producto.qr_url) {
             const qrName = `qr_${producto.id}.png`;
@@ -250,8 +252,7 @@ export default function InventarioPage() {
     }
   };
 
-  // 🟢 BORRADO INDIVIDUAL
-// 🟢 BORRADO INDIVIDUAL CON LIMPIEZA TOTAL DE ARCHIVOS
+  // 🟢 BORRADO INDIVIDUAL CON LIMPIEZA TOTAL DE ARCHIVOS
   const eliminarProducto = async (producto) => {
     const confirm = await Swal.fire({
       title: "¿Eliminar Producto?",
@@ -274,8 +275,6 @@ export default function InventarioPage() {
 
         // 2. Limpiar archivo de FOTO del bucket 'fotos_productos'
         if (producto.foto_url) {
-          // Extraemos el nombre del archivo de la URL
-          // Supongamos que la URL termina en /fotos_productos/nombre_archivo.webp
           const urlParts = producto.foto_url.split('/');
           const fileName = urlParts[urlParts.length - 1];
           await supabase.storage.from("fotos_productos").remove([fileName]);
@@ -296,7 +295,6 @@ export default function InventarioPage() {
     }
   };
 
-  // ... (armarKit y desarmarKit se mantienen igual)
   const armarKit = async (kit) => {
     Swal.fire({ title: "Verificando stock...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
@@ -373,7 +371,6 @@ export default function InventarioPage() {
           img.src = url;
         });
 
-      // 🟢 Ahora intentamos descargar la FOTO primero, si no tiene, bajamos el QR
       const imagenesBase64 = await Promise.all(
         inventarioFiltrado.map((p) => convertirImagenABase64(p.foto_url || p.qr_url))
       );
@@ -423,6 +420,52 @@ export default function InventarioPage() {
       Swal.close();
       Swal.fire("Error", "Hubo un fallo generando el PDF.", "error");
     }
+  };
+
+  // 🟢 NUEVO: REPORTE EN TABLA PARA CONTEO FÍSICO Y VALORACIÓN
+// 🟢 NUEVO: REPORTE EN TABLA PARA CONTEO FÍSICO Y VALORACIÓN (ACTUALIZADO A 3 COLUMNAS)
+  const generarReporteTablaPDF = () => {
+    if (inventarioFiltrado.length === 0) return Swal.fire("Atención", "No hay productos para el reporte.", "warning");
+
+    const doc = new jsPDF();
+    
+    // Título
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Reporte de Inventario - MILAS", 14, 20);
+    
+    // Subtítulo con fecha y cantidad de ítems filtrados
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Fecha de generación: ${new Date().toLocaleDateString()} | Total Ítems: ${inventarioFiltrado.length}`, 14, 26);
+
+    // Preparar datos (Exactamente las 3 columnas solicitadas)
+    const bodyData = inventarioFiltrado.map(p => {
+      // Unimos descripción + medida (si tiene) + modelo en una sola celda
+      const nombreCompleto = `${p.es_kit ? '[KIT] ' : ''}${p.descripcion} ${p.medida_cat?.nombre ? `| ${p.medida_cat.nombre}` : ''} ${p.modelo ? `| Mod: ${p.modelo}` : ''}`;
+      
+      return [
+        nombreCompleto,
+        p.cantidad,
+        `$${Number(p.precio_unitario).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 32,
+      head: [['Producto / Detalles', 'Stock', 'Precio']],
+      body: bodyData,
+      theme: 'striped',
+      headStyles: { fillColor: [30, 58, 138] }, // Azul corporativo MILAS
+      styles: { fontSize: 9 },
+      columnStyles: {
+        0: { cellWidth: 'auto' }, // Toma todo el espacio disponible para que el nombre no se corte
+        1: { halign: 'center', cellWidth: 30 }, // Stock centrado
+        2: { halign: 'right', cellWidth: 40 }   // Precio alineado a la derecha como buen formato financiero
+      }
+    });
+
+    doc.save("Reporte_Tabla_MILAS.pdf");
   };
 
   const inventarioFiltrado = inventario.filter((p) => {
@@ -475,6 +518,14 @@ export default function InventarioPage() {
               <Trash2 size={16} /> Borrar ({selectedIds.length})
             </button>
           )}
+
+          {/* 🟢 NUEVO BOTÓN PARA EL REPORTE DE TABLA */}
+          <button
+            onClick={generarReporteTablaPDF}
+            className="flex-1 xl:flex-none bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-100 transition-colors shadow-sm"
+          >
+            <Table size={16} /> Reporte Tabla
+          </button>
 
           <button
             onClick={generarCatalogoPDF}
@@ -561,7 +612,6 @@ export default function InventarioPage() {
                       <td className="p-4">
                         <div className="font-bold text-slate-800 flex items-center gap-3">
                           
-                          {/* 🟢 AVATAR DEL PRODUCTO (FOTO O QR) CON VISTA PREVIA FLOTANTE */}
                           <div 
                             onClick={() => { setProductoScanner(p); setIsModalAjusteOpen(true); }} 
                             className="group relative cursor-pointer shrink-0"
@@ -576,7 +626,6 @@ export default function InventarioPage() {
                               </div>
                             )}
 
-                            {/* Tooltip de Imagen Inversa (Muestra el QR si hay foto, o la foto si se muestra el QR, si ambas existen) */}
                             {(p.foto_url || p.qr_url) && (
                               <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-xl">
                                 <div className="bg-white p-2 rounded-2xl border border-slate-200 flex flex-col items-center gap-2 w-32">
@@ -601,7 +650,6 @@ export default function InventarioPage() {
                             )}
                           </div>
                           
-                          {/* Detalles Texto */}
                           <div>
                             <p className="whitespace-normal min-w-[180px] max-w-[250px] leading-tight mb-1 flex items-center gap-2">
                               {p.es_kit && <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[9px] uppercase tracking-widest shrink-0">KIT</span>}

@@ -491,6 +491,7 @@ export default function ModalFormProducto({
               <input
                 required
                 type="number"
+                step="1"
                 value={form.cantidad}
                 onChange={(e) => setForm({ ...form, cantidad: e.target.value })}
                 className="w-full bg-blue-50/50 border text-slate-800 border-blue-200 p-3 rounded-xl text-sm font-black focus:outline-none focus:border-blue-600 transition-all"
@@ -503,6 +504,7 @@ export default function ModalFormProducto({
               <input
                 required
                 type="number"
+                step="1"
                 value={form.stock_minimo}
                 onChange={(e) => setForm({ ...form, stock_minimo: e.target.value })}
                 className="w-full text-slate-800 bg-red-50 border border-red-200 p-3 rounded-xl text-sm font-black focus:outline-none focus:border-red-600 transition-all"

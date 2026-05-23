@@ -17,7 +17,7 @@ import {
   MapPin,
   Calculator,
   Calendar,
-  Search,
+  Percent,
 } from "lucide-react";
 
 import ModalMovimiento from "@/app/_components/ModalMovimiento";
@@ -31,7 +31,8 @@ export default function MovimientosPage() {
   const [filtroTipo, setFiltroTipo] = useState("todas"); // 'todas', 'nacional', 'importacion'
   const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
   const [anioFiltro, setAnioFiltro] = useState(new Date().getFullYear());
-
+// 🟢 NUEVO: Estado para filtrar entradas o salidas
+  const [filtroOperacion, setFiltroOperacion] = useState("ambos");
   const [expandedRows, setExpandedRows] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [movimientoAEditar, setMovimientoAEditar] = useState(null);
@@ -108,7 +109,7 @@ export default function MovimientosPage() {
     );
   };
 
-  // 🟢 BORRADO SEGURO CON MATEMÁTICA INVERSA
+  // 🟢 BORRADO SEGURO CON MATEMÁTICA INVERS
   const eliminarMovimiento = async (mov) => {
     const confirm = await Swal.fire({
       title: "¿Eliminar Factura?",
@@ -251,6 +252,7 @@ export default function MovimientosPage() {
   };
 
   // 🟢 FILTRADO DE TABLA (Por Mes, Año y Tipo)
+ // 🟢 FILTRADO DE TABLA (Por Mes, Año y Tipo)
   const movimientosFiltrados = movimientos.filter((m) => {
     const fechaMov = new Date(m.fecha + "T00:00:00");
     const coincideMes = fechaMov.getMonth() + 1 === Number(mesFiltro);
@@ -260,11 +262,36 @@ export default function MovimientosPage() {
     if (filtroTipo === "nacional") coincideTipo = !m.es_importacion;
     if (filtroTipo === "importacion") coincideTipo = m.es_importacion;
 
-    return coincideMes && coincideAnio && coincideTipo;
-  });
+    // 🟢 NUEVO: Lógica para validar si es entrada o salida
+    let coincideOperacion = true;
+    if (filtroOperacion !== "ambos") coincideOperacion = m.tipo === filtroOperacion;
 
-  const totalPaginas =
-    Math.ceil(movimientosFiltrados.length / itemsPorPagina) || 1;
+    return coincideMes && coincideAnio && coincideTipo && coincideOperacion;
+  });
+  // 🟢 CÁLCULO DE RECUADROS FINANCIEROS EN TIEMPO REAL
+  const totalEntradas = movimientosFiltrados
+    .filter((m) => m.tipo === "entrada")
+    .reduce((acc, m) => acc + Number(m.total_mxn || 0), 0);
+
+  const totalSalidas = movimientosFiltrados
+    .filter((m) => m.tipo === "salida")
+    .reduce((acc, m) => acc + Number(m.total_mxn || 0), 0);
+
+  const totalImpuestosGastos = movimientosFiltrados
+    .filter((m) => m.tipo === "entrada")
+    .reduce((acc, m) => {
+      if (m.es_importacion) {
+        // Gastos de Importación en MXN = Total Factura MXN - Costo Material en MXN
+        const costoMaterialMXN = Number(m.subtotal_original || 0) * Number(m.tipo_cambio || 1);
+        const gastosMXN = Number(m.total_mxn || 0) - costoMaterialMXN;
+        return acc + gastosMXN;
+      } else {
+        // IVA de Compras Nacionales
+        return acc + Number(m.iva || 0);
+      }
+    }, 0);
+
+  const totalPaginas = Math.ceil(movimientosFiltrados.length / itemsPorPagina) || 1;
   const movsPaginados = movimientosFiltrados.slice(
     (paginaActual - 1) * itemsPorPagina,
     paginaActual * itemsPorPagina,
@@ -333,7 +360,23 @@ export default function MovimientosPage() {
           </button>
         </div>
 
-        <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex gap-2">
+      <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex gap-2 overflow-x-auto">
+          
+          {/* 🟢 NUEVO SELECTOR DE ENTRADA / SALIDA */}
+          <select
+            value={filtroOperacion}
+            onChange={(e) => {
+              setFiltroOperacion(e.target.value);
+              setPaginaActual(1);
+            }}
+            className="flex-1 bg-slate-50 border-none rounded-xl text-xs font-black uppercase tracking-widest p-2.5 outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer min-w-max"
+          >
+            <option value="ambos">Entradas y Salidas</option>
+            <option value="entrada">Solo Entradas</option>
+            <option value="salida">Solo Salidas</option>
+          </select>
+
+          {/* SELECTOR DE MES */}
           <select
             value={mesFiltro}
             onChange={(e) => {
@@ -348,6 +391,8 @@ export default function MovimientosPage() {
               </option>
             ))}
           </select>
+          
+          {/* INPUT DE AÑO */}
           <input
             type="number"
             value={anioFiltro}
@@ -357,6 +402,48 @@ export default function MovimientosPage() {
             }}
             className="w-24 bg-slate-50 border-none rounded-xl text-xs font-black p-2.5 outline-none focus:ring-2 focus:ring-blue-600 text-center"
           />
+        </div>
+      </div>
+
+      {/* 🟢 RECUADROS FINANCIEROS DINÁMICOS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* ENTRADAS */}
+        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+            <ArrowDownRight size={24} strokeWidth={3} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Total Entradas</p>
+            <p className="text-2xl font-black text-emerald-900 leading-none mt-1">
+              $ {totalEntradas.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+        </div>
+
+        {/* SALIDAS */}
+        <div className="bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center shrink-0">
+            <ArrowUpRight size={24} strokeWidth={3} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Total Salidas</p>
+            <p className="text-2xl font-black text-orange-900 leading-none mt-1">
+              $ {totalSalidas.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+        </div>
+
+        {/* IMPUESTOS Y GASTOS */}
+        <div className="bg-red-50 border border-red-200 p-4 rounded-2xl flex items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center shrink-0">
+            <Percent size={22} strokeWidth={3} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-red-600 uppercase tracking-widest">Impuestos y Gastos</p>
+            <p className="text-2xl font-black text-red-900 leading-none mt-1">
+              $ {totalImpuestosGastos.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -540,7 +627,7 @@ export default function MovimientosPage() {
                   );
                 })
               )}
-              {movsPaginados.length === 0 && !cargando && (
+              {movimientosFiltrados.length === 0 && !cargando && (
                 <tr>
                   <td
                     colSpan="6"

@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/_lib/supabase/supabase";
@@ -23,7 +22,6 @@ export default function ModalMovimiento({
   onGuardado,
 }) {
   const [cargando, setCargando] = useState(false);
-
 
   const [cabecera, setCabecera] = useState({
     tipo: "entrada",
@@ -72,7 +70,7 @@ export default function ModalMovimiento({
 
   if (!isOpen) return null;
 
-
+  // 🟢 LÓGICA MATEMÁTICA SEPARADA (ENTRADA VS SALIDA)
   const subtotalOriginal = detalles.reduce(
     (acc, det) => acc + Number(det.cantidad) * Number(det.precio_unitario),
     0,
@@ -82,16 +80,21 @@ export default function ModalMovimiento({
   let totalUSD = 0;
   let totalMXN = 0;
 
-  if (cabecera.es_importacion) {
-    const gastosUSD =
-      subtotalOriginal * (Number(cabecera.porcentaje_importacion) / 100);
-    totalUSD = subtotalOriginal + gastosUSD;
-    totalMXN = totalUSD * Number(cabecera.tipo_cambio);
+  if (cabecera.tipo === "salida") {
+    // Si es salida, el precio digitado es el final. No hay IVA que calcular para la compra.
+    totalMXN = subtotalOriginal;
+    iva = 0; 
   } else {
-    iva = subtotalOriginal * 0.16;
-    totalMXN = subtotalOriginal + iva;
+    // Si es entrada, calculamos impuestos o pedimentos
+    if (cabecera.es_importacion) {
+      const gastosUSD = subtotalOriginal * (Number(cabecera.porcentaje_importacion) / 100);
+      totalUSD = subtotalOriginal + gastosUSD;
+      totalMXN = totalUSD * Number(cabecera.tipo_cambio);
+    } else {
+      iva = subtotalOriginal * 0.16;
+      totalMXN = subtotalOriginal + iva;
+    }
   }
-
 
   const agregarFila = () =>
     setDetalles([
@@ -105,7 +108,6 @@ export default function ModalMovimiento({
     setDetalles(nuevos);
   };
 
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -118,7 +120,8 @@ export default function ModalMovimiento({
         "Agrega al menos un producto válido.",
         "warning",
       );
-    if (cabecera.es_importacion && !cabecera.numero_pedimento.trim())
+    // Pedimento solo es obligatorio si es Entrada E Importación
+    if (cabecera.tipo === "entrada" && cabecera.es_importacion && !cabecera.numero_pedimento.trim())
       return Swal.fire(
         "Atención",
         "El número de pedimento es obligatorio en importaciones.",
@@ -155,15 +158,16 @@ export default function ModalMovimiento({
           .from("movimientos_detalles")
           .delete()
           .eq("id_movimiento", idMovimiento);
+        
         await supabase
           .from("movimientos_cabecera")
           .update({
             tipo: cabecera.tipo,
-            es_importacion: cabecera.es_importacion,
-            numero_pedimento: cabecera.numero_pedimento,
+            es_importacion: cabecera.tipo === "entrada" ? cabecera.es_importacion : false,
+            numero_pedimento: cabecera.tipo === "entrada" ? cabecera.numero_pedimento : null,
             fecha: cabecera.fecha,
-            tipo_cambio: cabecera.tipo_cambio,
-            porcentaje_importacion: cabecera.porcentaje_importacion,
+            tipo_cambio: cabecera.tipo === "entrada" ? cabecera.tipo_cambio : 1.0,
+            porcentaje_importacion: cabecera.tipo === "entrada" ? cabecera.porcentaje_importacion : 0.0,
             subtotal_original: subtotalOriginal,
             iva: iva,
             total_usd: totalUSD,
@@ -177,11 +181,11 @@ export default function ModalMovimiento({
           .insert([
             {
               tipo: cabecera.tipo,
-              es_importacion: cabecera.es_importacion,
-              numero_pedimento: cabecera.numero_pedimento,
+              es_importacion: cabecera.tipo === "entrada" ? cabecera.es_importacion : false,
+              numero_pedimento: cabecera.tipo === "entrada" ? cabecera.numero_pedimento : null,
               fecha: cabecera.fecha,
-              tipo_cambio: cabecera.tipo_cambio,
-              porcentaje_importacion: cabecera.porcentaje_importacion,
+              tipo_cambio: cabecera.tipo === "entrada" ? cabecera.tipo_cambio : 1.0,
+              porcentaje_importacion: cabecera.tipo === "entrada" ? cabecera.porcentaje_importacion : 0.0,
               subtotal_original: subtotalOriginal,
               iva: iva,
               total_usd: totalUSD,
@@ -207,16 +211,12 @@ export default function ModalMovimiento({
           },
         ]);
 
-       
         const { data: prodInfo } = await supabase
           .from("inventario")
-          .select(
-            "cantidad, id_condicion, inventario_condiciones(permite_actualizar_precio)",
-          )
+          .select("cantidad, id_condicion, inventario_condiciones(permite_actualizar_precio)")
           .eq("id", det.id_producto)
           .single();
 
-      
         let nuevaCantidad = Number(prodInfo.cantidad);
         if (cabecera.tipo === "entrada") {
           nuevaCantidad += Number(det.cantidad);
@@ -224,34 +224,21 @@ export default function ModalMovimiento({
           nuevaCantidad -= Number(det.cantidad);
         }
 
-        const puedeActualizarPrecio =
-          prodInfo?.inventario_condiciones?.permite_actualizar_precio;
-
-        // Armamos el paquete de datos a actualizar en la tabla Inventario
+        const puedeActualizarPrecio = prodInfo?.inventario_condiciones?.permite_actualizar_precio;
         const updatePayload = { cantidad: nuevaCantidad };
 
-        // Solo si es Entrada Y la condición lo permite, actualizamos el precio
+        // 🟢 Solo si es ENTRADA Y la condición lo permite, actualizamos el precio en el catálogo
         if (cabecera.tipo === "entrada" && puedeActualizarPrecio) {
           if (cabecera.es_importacion) {
             const costoUnitarioUSD = Number(det.precio_unitario);
-            const costoGastosUSD =
-              costoUnitarioUSD *
-              (Number(cabecera.porcentaje_importacion) / 100);
-            const costoRealMXN =
-              (costoUnitarioUSD + costoGastosUSD) *
-              Number(cabecera.tipo_cambio);
+            const costoGastosUSD = costoUnitarioUSD * (Number(cabecera.porcentaje_importacion) / 100);
+            const costoRealMXN = (costoUnitarioUSD + costoGastosUSD) * Number(cabecera.tipo_cambio);
             updatePayload.precio_unitario = costoRealMXN;
           } else {
             updatePayload.precio_unitario = det.precio_unitario;
           }
-        } else if (cabecera.tipo === "entrada" && !puedeActualizarPrecio) {
-          // Si no puede actualizar, se queda el precio que ya tenía el catálogo
-          console.log(
-            "Este producto tiene una condición que no altera el precio de catálogo.",
-          );
         }
 
-        // Ejecutamos la actualización final del inventario
         await supabase
           .from("inventario")
           .update(updatePayload)
@@ -279,7 +266,6 @@ export default function ModalMovimiento({
     }
   };
 
-  // 🟢 Generador Resistente de la Súper-Línea
   const getSuperLinea = (p) => {
     if (!p) return "Producto no identificado";
     const partes = [];
@@ -330,9 +316,14 @@ export default function ModalMovimiento({
               </label>
               <select
                 value={cabecera.tipo}
-                onChange={(e) =>
-                  setCabecera({ ...cabecera, tipo: e.target.value })
-                }
+                onChange={(e) => {
+                  const nuevoTipo = e.target.value;
+                  setCabecera({ 
+                    ...cabecera, 
+                    tipo: nuevoTipo,
+                    es_importacion: nuevoTipo === "salida" ? false : cabecera.es_importacion 
+                  });
+                }}
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-600 outline-none"
               >
                 <option value="entrada">Entrada (Suma Stock)</option>
@@ -352,30 +343,34 @@ export default function ModalMovimiento({
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-600 outline-none"
               />
             </div>
-            <div className="md:col-span-2 flex items-center gap-4 bg-slate-100 p-2.5 rounded-xl border border-slate-200">
-              <label className="flex items-center gap-2 cursor-pointer w-full">
-                <input
-                  type="checkbox"
-                  checked={cabecera.es_importacion}
-                  onChange={(e) =>
-                    setCabecera({
-                      ...cabecera,
-                      es_importacion: e.target.checked,
-                    })
-                  }
-                  className="w-5 h-5 accent-blue-600 rounded"
-                />
-                <div>
-                  <span className="text-sm font-black text-blue-900 block flex items-center gap-1">
-                    <Globe size={14} /> Es una Importación
-                  </span>
-                </div>
-              </label>
-            </div>
+            
+            {/* Ocultamos opciones de importación si es salida */}
+            {cabecera.tipo === "entrada" && (
+              <div className="md:col-span-2 flex items-center gap-4 bg-slate-100 p-2.5 rounded-xl border border-slate-200">
+                <label className="flex items-center gap-2 cursor-pointer w-full">
+                  <input
+                    type="checkbox"
+                    checked={cabecera.es_importacion}
+                    onChange={(e) =>
+                      setCabecera({
+                        ...cabecera,
+                        es_importacion: e.target.checked,
+                      })
+                    }
+                    className="w-5 h-5 accent-blue-600 rounded"
+                  />
+                  <div>
+                    <span className="text-sm font-black text-blue-900 block flex items-center gap-1">
+                      <Globe size={14} /> Es una Importación
+                    </span>
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* SECCIÓN 1.5: DATOS DE IMPORTACIÓN */}
-          {cabecera.es_importacion && (
+          {cabecera.tipo === "entrada" && cabecera.es_importacion && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-5 rounded-2xl border border-blue-200 shadow-sm animate-in fade-in slide-in-from-top-2">
               <div>
                 <label className="block text-[10px] font-black text-blue-800 uppercase tracking-widest mb-1.5">
@@ -492,10 +487,12 @@ export default function ModalMovimiento({
                     </div>
                     <div className="w-32 shrink-0">
                       <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-                        {cabecera.es_importacion ? (
-                          <DollarSign size={10} />
-                        ) : null}{" "}
-                        P. Unit. {cabecera.es_importacion ? "USD" : "MXN"}
+                        {cabecera.tipo === "salida" ? "PRECIO FINAL VENTA" : (
+                          <>
+                            {cabecera.es_importacion ? <DollarSign size={10} /> : null}
+                            P. Unit. {cabecera.es_importacion ? "USD" : "MXN"}
+                          </>
+                        )}
                       </label>
                       <input
                         required
@@ -538,15 +535,36 @@ export default function ModalMovimiento({
                   Resumen Financiero
                 </h4>
                 <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
-                  {cabecera.es_importacion
-                    ? "Factura de Importación"
-                    : "Factura Nacional"}
+                  {cabecera.tipo === "salida" 
+                    ? "Salida de Inventario" 
+                    : cabecera.es_importacion
+                      ? "Factura de Importación"
+                      : "Factura Nacional"}
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap justify-end gap-6 text-right">
-              {cabecera.es_importacion ? (
+              {cabecera.tipo === "salida" ? (
+                <>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-500 uppercase">
+                      Total Piezas
+                    </p>
+                    <p className="font-bold text-slate-700">
+                      {detalles.reduce((acc, d) => acc + Number(d.cantidad), 0)}
+                    </p>
+                  </div>
+                  <div className="border-l border-emerald-200 pl-6">
+                    <p className="text-[10px] font-black text-emerald-900 uppercase">
+                      TOTAL VENTA (NETO)
+                    </p>
+                    <p className="text-2xl font-black text-emerald-900">
+                      ${totalMXN.toFixed(2)}
+                    </p>
+                  </div>
+                </>
+              ) : cabecera.es_importacion ? (
                 <>
                   <div>
                     <p className="text-[10px] font-black text-slate-500 uppercase">
