@@ -236,7 +236,7 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
                   </div>
 
                   <div className="w-full flex-1">
-                    <input required type="text" placeholder="Concepto (Ej. Oxxo, Caseta...)" value={gasto.descripcion} onChange={(e) => actualizarGasto(idx, "descripcion", e.target.value)} className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 focus:border-blue-600 outline-none" />
+                    <input required type="text" placeholder="(Descripción del pago)" value={gasto.descripcion} onChange={(e) => actualizarGasto(idx, "descripcion", e.target.value)} className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 focus:border-blue-600 outline-none" />
                   </div>
 
                   <div className="w-full md:w-32 shrink-0 relative">
