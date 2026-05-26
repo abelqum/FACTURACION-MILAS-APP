@@ -74,7 +74,7 @@ export default function Navbar() {
 
           {/* Admin Login */}
           <Link
-            href="/portal"
+            href="/"
             className="hidden md:block text-xs font-bold uppercase tracking-widest text-[#004532] hover:underline"
           >
             Admin
@@ -117,7 +117,7 @@ export default function Navbar() {
               );
             })}
             <Link
-              href="/portal"
+              href="/"
               onClick={() => setMenuOpen(false)}
               className="text-xs font-bold uppercase tracking-widest text-[#004532] hover:underline"
             >

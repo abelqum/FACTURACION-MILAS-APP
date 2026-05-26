@@ -25,7 +25,7 @@ export default function DashboardLayout({ children }) {
 
         if (error || !session) {
           if (error) await supabase.auth.signOut();
-          router.push("/portal");
+          router.push("/");
         } else {
           // 🟢 BUSCAMOS EL ROL DEL USUARIO EN LA TABLA PERFILES
           const { data: perfil } = await supabase
@@ -39,7 +39,7 @@ export default function DashboardLayout({ children }) {
         }
       } catch (err) {
         await supabase.auth.signOut();
-        router.push("/portal");
+        router.push("/");
       }
     };
     checkUser();
@@ -103,6 +103,12 @@ export default function DashboardLayout({ children }) {
       href: "/dashboard/facturas",
       icon: "📄",
       roles: ["admin", "editor"],
+    },
+     {
+      name: "Viajes",
+      href: "/dashboard/viajes",
+      icon: "🚗",
+      roles: ["admin", "empleado"],
     },
     {
       name: "Directorio de Clientes",
