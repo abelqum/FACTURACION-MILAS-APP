@@ -41,7 +41,7 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
   };
 
   const optimizarImagen = (file) => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (!file) return resolve(null);
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -55,9 +55,14 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
           else if (height > 1000) { width *= 1000 / height; height = 1000; }
           canvas.width = width; canvas.height = height;
           canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          canvas.toBlob((blob) => resolve(new File([blob], `ticket_${Date.now()}.webp`, { type: "image/webp" })), "image/webp", 0.7);
+          
+          // Generamos un nombre único y seguro
+          const uniqueId = Math.random().toString(36).substring(2, 10);
+          canvas.toBlob((blob) => resolve(new File([blob], `ticket_${Date.now()}_${uniqueId}.webp`, { type: "image/webp" })), "image/webp", 0.7);
         };
+        img.onerror = () => reject(new Error("Error procesando imagen"));
       };
+      reader.onerror = () => reject(new Error("Error leyendo archivo"));
     });
   };
 
@@ -66,23 +71,28 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
     if (validos.length === 0) return Swal.fire("Atención", "Llena Categoría, Descripción y Monto de al menos un ticket.", "warning");
 
     setCargando(true);
-    Swal.fire({ title: "Enviando registros...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: "Procesando registros...", text: "Subiendo comprobantes, por favor espera.", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      for (let gasto of validos) {
+      // 1. Procesar y subir TODAS las fotos en paralelo (Es rapidísimo)
+      const promesasGastos = validos.map(async (gasto) => {
         let publicUrl = null;
+        
         if (gasto.fotoArchivo) {
           const optimizedFile = await optimizarImagen(gasto.fotoArchivo);
-          const fileName = `viaje_${viaje.id}/${Date.now()}_${Math.floor(Math.random() * 1000)}.webp`;
+          const fileName = `viaje_${viaje.id}/${optimizedFile.name}`;
+          
           const { error: upErr } = await supabase.storage.from("tickets_gastos").upload(fileName, optimizedFile, { contentType: "image/webp", upsert: true });
           if (upErr) throw upErr;
+          
           const { data: urlData } = supabase.storage.from("tickets_gastos").getPublicUrl(fileName);
           publicUrl = urlData.publicUrl;
         }
 
-        await supabase.from("viaje_gastos").insert([{
+        // Devolvemos el objeto formateado listo para la base de datos
+        return {
           id_viaje: viaje.id,
           id_usuario: user.id,
           categoria: gasto.categoria,
@@ -90,14 +100,22 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
           monto: Number(gasto.monto),
           foto_ticket_url: publicUrl,
           estatus: "pendiente"
-        }]);
-      }
+        };
+      });
+
+      // Esperamos a que todos terminen de subir sus fotos
+      const payloadGastos = await Promise.all(promesasGastos);
+
+      // 2. Insertamos TODOS los registros de un solo golpe (Bulk Insert)
+      const { error: insertError } = await supabase.from("viaje_gastos").insert(payloadGastos);
+      if (insertError) throw insertError;
       
-      Swal.fire("Éxito", "Gastos enviados a revisión.", "success");
+      Swal.fire("Éxito", "Todos los gastos fueron enviados a revisión.", "success");
       setNuevosGastos([{ categoria: "", descripcion: "", monto: "", fotoArchivo: null, fotoPreview: null }]);
       onActualizado();
     } catch (error) {
-      Swal.fire("Error", "Fallo al subir gastos.", "error");
+      console.error(error);
+      Swal.fire("Error", "Fallo al subir los gastos. Intenta de nuevo.", "error");
     } finally {
       setCargando(false);
     }
