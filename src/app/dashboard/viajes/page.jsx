@@ -269,7 +269,7 @@ export default function ViajesPage() {
                       <Eye size={16} />
                     </button>
                   )}
-                  {rolUsuario === "admin" && viaje.estatus !== 'finalizado' && (
+                  {rolUsuario === "admin"  && (
                     <button 
                       onClick={(e) => abrirEditarViaje(e, viaje)}
                       className="p-2 bg-slate-50 border border-slate-200 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
