@@ -13,8 +13,12 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
     destino: "",
     fecha_inicio: new Date().toISOString().split("T")[0],
     fecha_fin: new Date().toISOString().split("T")[0],
-    presupuesto_viaticos: 0, // 🟢 AHORA ESTE ES EL TOTAL GENERAL DE LA BOLSA
-    presupuesto_comidas_diario: 0, 
+    presupuesto_gasolina: 0,
+    presupuesto_casetas: 0,
+    presupuesto_alimentos: 0,
+    presupuesto_hospedaje: 0,
+    presupuesto_material: 0,
+    presupuesto_otros: 0,
   });
 
   const [empleadosSeleccionados, setEmpleadosSeleccionados] = useState([]);
@@ -29,15 +33,14 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
 
   const diasTotales = calcularDias();
   
-  // 🟢 NUEVA MATEMÁTICA
-  // 1. Lo que forzosamente se va a gastar en comida (Costo x 3 comidas x Días x Personas)
-  const presupuestoComidaTotal = Number(form.presupuesto_comidas_diario) * 3 * diasTotales * (empleadosSeleccionados.length || 1);
-  
-  // 2. La bolsa total es lo que el admin escriba en viáticos
-  const presupuestoTotalEstimado = Number(form.presupuesto_viaticos);
-
-  // 3. Lo que sobra para casetas, gasolina y extras
-  const presupuestoRestante = presupuestoTotalEstimado - presupuestoComidaTotal;
+  // 🟢 SUMA TOTAL DE LOS 6 RUBROS
+  const presupuestoTotal = 
+    Number(form.presupuesto_gasolina) + 
+    Number(form.presupuesto_casetas) + 
+    Number(form.presupuesto_alimentos) + 
+    Number(form.presupuesto_hospedaje) + 
+    Number(form.presupuesto_material) + 
+    Number(form.presupuesto_otros);
 
   useEffect(() => {
     if (isOpen) {
@@ -48,18 +51,21 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
           destino: viajeEdicion.destino,
           fecha_inicio: viajeEdicion.fecha_inicio,
           fecha_fin: viajeEdicion.fecha_fin,
-          presupuesto_viaticos: viajeEdicion.presupuesto_viaticos,
-          presupuesto_comidas_diario: viajeEdicion.presupuesto_comidas_diario,
+          presupuesto_gasolina: viajeEdicion.presupuesto_gasolina || 0,
+          presupuesto_casetas: viajeEdicion.presupuesto_casetas || 0,
+          presupuesto_alimentos: viajeEdicion.presupuesto_alimentos || 0,
+          presupuesto_hospedaje: viajeEdicion.presupuesto_hospedaje || 0,
+          presupuesto_material: viajeEdicion.presupuesto_material || 0,
+          presupuesto_otros: viajeEdicion.presupuesto_otros || 0,
         });
         setEmpleadosSeleccionados(viajeEdicion.viaje_usuarios?.map(u => u.id_usuario) || []);
       } else {
         setForm({
-          nombre: "",
-          destino: "",
+          nombre: "", destino: "",
           fecha_inicio: new Date().toISOString().split("T")[0],
           fecha_fin: new Date().toISOString().split("T")[0],
-          presupuesto_viaticos: 0,
-          presupuesto_comidas_diario: 0,
+          presupuesto_gasolina: 0, presupuesto_casetas: 0, presupuesto_alimentos: 0,
+          presupuesto_hospedaje: 0, presupuesto_material: 0, presupuesto_otros: 0,
         });
         setEmpleadosSeleccionados([]);
       }
@@ -79,53 +85,27 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
     e.preventDefault();
     if (empleadosSeleccionados.length === 0) return Swal.fire("Atención", "Asigna al menos a una persona al viaje.", "warning");
 
-    // 🟢 VALIDACIÓN ESTRICTA: El total no puede ser menor a las comidas
-    if (presupuestoTotalEstimado < presupuestoComidaTotal) {
-      return Swal.fire(
-        "Presupuesto Insuficiente", 
-        `El Total de Viáticos ($${presupuestoTotalEstimado.toLocaleString()}) no cubre el mínimo requerido para las comidas calculadas ($${presupuestoComidaTotal.toLocaleString()}). Aumenta el total o reduce el costo por comida.`, 
-        "error"
-      );
-    }
-
     setCargando(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-
       let idViaje = null;
 
+      const datosViaje = {
+        nombre: form.nombre, destino: form.destino,
+        fecha_inicio: form.fecha_inicio, fecha_fin: form.fecha_fin, dias: diasTotales,
+        presupuesto_gasolina: form.presupuesto_gasolina, presupuesto_casetas: form.presupuesto_casetas,
+        presupuesto_alimentos: form.presupuesto_alimentos, presupuesto_hospedaje: form.presupuesto_hospedaje,
+        presupuesto_material: form.presupuesto_material, presupuesto_otros: form.presupuesto_otros,
+      };
+
       if (viajeEdicion) {
-        // ACTUALIZAR VIAJE
-        const { error: viajeError } = await supabase
-          .from("viajes")
-          .update({
-            nombre: form.nombre,
-            destino: form.destino,
-            fecha_inicio: form.fecha_inicio,
-            fecha_fin: form.fecha_fin,
-            dias: diasTotales,
-            presupuesto_viaticos: form.presupuesto_viaticos,
-            presupuesto_comidas_diario: form.presupuesto_comidas_diario,
-          })
-          .eq("id", viajeEdicion.id);
+        const { error: viajeError } = await supabase.from("viajes").update(datosViaje).eq("id", viajeEdicion.id);
         if (viajeError) throw viajeError;
         idViaje = viajeEdicion.id;
-
         await supabase.from("viaje_usuarios").delete().eq("id_viaje", idViaje);
       } else {
-        // CREAR NUEVO VIAJE
-        const { data: nuevoViaje, error: viajeError } = await supabase
-          .from("viajes")
-          .insert([{
-            nombre: form.nombre,
-            destino: form.destino,
-            fecha_inicio: form.fecha_inicio,
-            fecha_fin: form.fecha_fin,
-            dias: diasTotales,
-            presupuesto_viaticos: form.presupuesto_viaticos,
-            presupuesto_comidas_diario: form.presupuesto_comidas_diario,
-            creado_por: user.id
-          }]).select().single();
+        datosViaje.creado_por = user.id;
+        const { data: nuevoViaje, error: viajeError } = await supabase.from("viajes").insert([datosViaje]).select().single();
         if (viajeError) throw viajeError;
         idViaje = nuevoViaje.id;
       }
@@ -144,11 +124,54 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
     }
   };
 
+  // 🟢 BORRAR SOLO IMÁGENES
+  const eliminarSoloImagenes = async () => {
+    const confirm = await Swal.fire({
+      title: "¿Borrar todas las imágenes?",
+      text: "Se eliminarán las fotos de todos los tickets de este viaje. Los registros de gastos se mantendrán. ¿Continuar?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#f59e0b",
+      confirmButtonText: "Sí, borrar fotos",
+    });
+
+    if (confirm.isConfirmed) {
+      setCargando(true);
+      try {
+        const { data: gastos } = await supabase.from("viaje_gastos").select("id, foto_ticket_url").eq("id_viaje", viajeEdicion.id);
+        const filesToRemove = [];
+        const idsToUpdate = [];
+
+        for (const gasto of gastos || []) {
+          if (gasto.foto_ticket_url) {
+            const urlParts = gasto.foto_ticket_url.split('/');
+            filesToRemove.push(`${urlParts[urlParts.length - 2]}/${urlParts[urlParts.length - 1]}`);
+            idsToUpdate.push(gasto.id);
+          }
+        }
+
+        if (filesToRemove.length > 0) {
+          await supabase.storage.from("tickets_gastos").remove(filesToRemove);
+          await supabase.from("viaje_gastos").update({ foto_ticket_url: null }).in("id", idsToUpdate);
+        }
+
+        Swal.fire("¡Listo!", "Todas las imágenes fueron eliminadas del servidor.", "success");
+        onGuardado();
+        onClose();
+      } catch (error) {
+        Swal.fire("Error", "No se pudieron borrar las imágenes.", "error");
+      } finally {
+        setCargando(false);
+      }
+    }
+  };
+
+  // 🟢 BORRAR VIAJE COMPLETO
   const eliminarViaje = async () => {
     const confirm = await Swal.fire({
       title: "¿Eliminar Viaje Completo?",
-      text: "Se borrará el viaje, los usuarios asignados y todas las fotos de tickets asociadas.",
-      icon: "warning",
+      text: "Se borrará todo: gastos, registros y archivos.",
+      icon: "error",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
       confirmButtonText: "Sí, borrar todo",
@@ -158,17 +181,15 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
       setCargando(true);
       try {
         const { data: gastos } = await supabase.from("viaje_gastos").select("foto_ticket_url").eq("id_viaje", viajeEdicion.id);
-        
-        for (const gasto of gastos || []) {
-          if (gasto.foto_ticket_url) {
-            const fileName = gasto.foto_ticket_url.split('/').pop();
-            await supabase.storage.from("tickets_gastos").remove([fileName]);
-          }
-        }
+        const filesToRemove = gastos.filter(g => g.foto_ticket_url).map(g => {
+             const parts = g.foto_ticket_url.split('/');
+             return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+        });
 
+        if (filesToRemove.length > 0) await supabase.storage.from("tickets_gastos").remove(filesToRemove);
         await supabase.from("viajes").delete().eq("id", viajeEdicion.id);
 
-        Swal.fire({ icon: "success", title: "Eliminado", toast: true, position: "top-end", timer: 2000, showConfirmButton: false });
+        Swal.fire({ icon: "success", title: "Viaje Eliminado", toast: true, position: "top-end", timer: 2000, showConfirmButton: false });
         onGuardado();
         onClose();
       } catch (error) {
@@ -190,7 +211,7 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
             <h3 className="font-black text-slate-800 text-xl flex items-center gap-2">
               <CarFront className="text-blue-700" /> {viajeEdicion ? "Editar Viaje" : "Nuevo Viaje Corporativo"}
             </h3>
-            <p className="text-xs text-slate-500 font-medium mt-1">Define el destino, fechas, equipo asignado y topes de gastos.</p>
+            <p className="text-xs text-slate-500 font-medium mt-1">Asigna presupuestos detallados por categoría.</p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-red-500 bg-slate-100 hover:bg-red-50 rounded-xl transition-all">
             <X size={20} />
@@ -199,7 +220,8 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* COLUMNA IZQUIERDA: DATOS GENERALES */}
+            
+            {/* COLUMNA IZQ: DATOS Y EQUIPO */}
             <div className="space-y-4">
               <h4 className="font-black text-slate-700 text-sm uppercase tracking-widest flex items-center gap-2 border-b border-slate-200 pb-2">
                 <MapPin size={16} /> Detalles del Destino
@@ -225,56 +247,6 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
                   <input required type="date" min={form.fecha_inicio} value={form.fecha_fin} onChange={(e) => setForm({...form, fecha_fin: e.target.value})} className="w-full p-3 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-600 outline-none" />
                 </div>
               </div>
-              
-              <div className="bg-blue-50 text-blue-800 text-xs font-black uppercase tracking-widest p-3 rounded-xl border border-blue-100 flex items-center justify-between">
-                <span className="flex items-center gap-1"><Calendar size={14} /> Total Días Calculados:</span>
-                <span className="text-lg">{diasTotales}</span>
-              </div>
-            </div>
-
-            {/* COLUMNA DERECHA: PRESUPUESTOS Y EQUIPO */}
-            <div className="space-y-4">
-              <h4 className="font-black text-slate-700 text-sm uppercase tracking-widest flex items-center gap-2 border-b border-slate-200 pb-2">
-                <DollarSign size={16} /> Presupuestos
-              </h4>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Costo x 1 Comida *</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-3 text-slate-400 font-black">$</span>
-                    <input required type="number" min="0" step="0.01" value={form.presupuesto_comidas_diario} onChange={(e) => setForm({...form, presupuesto_comidas_diario: e.target.value})} className="w-full p-3 pl-7 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-600 outline-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Total Viáticos Entregados *</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-3 text-slate-400 font-black">$</span>
-                    <input required type="number" min="0" step="0.01" value={form.presupuesto_viaticos} onChange={(e) => setForm({...form, presupuesto_viaticos: e.target.value})} className="w-full p-3 pl-7 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-600 outline-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* 🟢 RECUADRO DE DESGLOSE MATEMÁTICO */}
-              <div className={`p-4 rounded-xl border transition-colors ${presupuestoTotalEstimado < presupuestoComidaTotal ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                <p className={`text-[10px] font-black uppercase tracking-widest ${presupuestoTotalEstimado < presupuestoComidaTotal ? 'text-red-600' : 'text-emerald-600'}`}>
-                  Desglose de la Bolsa
-                </p>
-                <p className={`text-3xl font-black mt-1 ${presupuestoTotalEstimado < presupuestoComidaTotal ? 'text-red-900' : 'text-emerald-900'}`}>
-                  ${presupuestoTotalEstimado.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                </p>
-                
-                <div className={`mt-3 space-y-1.5 text-[10px] font-semibold ${presupuestoTotalEstimado < presupuestoComidaTotal ? 'text-red-700' : 'text-emerald-800'}`}>
-                  <div className="flex justify-between border-b border-black/5 pb-1">
-                    <span>🍽️ Alimentos reservados:</span>
-                    <span className="font-black">${presupuestoComidaTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>🚗 Gasolina, Casetas, Otros:</span>
-                    <span className="font-black">${(presupuestoRestante > 0 ? presupuestoRestante : 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
 
               <h4 className="font-black text-slate-700 text-sm uppercase tracking-widest flex items-center gap-2 border-b border-slate-200 pb-2 pt-2">
                 <Users size={16} /> Equipo Asignado
@@ -292,14 +264,56 @@ export default function ModalNuevoViaje({ isOpen, onClose, onGuardado, viajeEdic
                 ))}
               </div>
             </div>
+
+            {/* COLUMNA DER: 6 CATEGORÍAS */}
+            <div className="space-y-4">
+              <h4 className="font-black text-slate-700 text-sm uppercase tracking-widest flex items-center gap-2 border-b border-slate-200 pb-2">
+                <DollarSign size={16} /> Presupuesto por Categoría
+              </h4>
+
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { id: 'presupuesto_alimentos', label: 'Comidas / Alim.' },
+                  { id: 'presupuesto_gasolina', label: 'Gasolina' },
+                  { id: 'presupuesto_casetas', label: 'Casetas' },
+                  { id: 'presupuesto_hospedaje', label: 'Hospedaje' },
+                  { id: 'presupuesto_material', label: 'Material' },
+                  { id: 'presupuesto_otros', label: 'Otros' },
+                ].map(cat => (
+                  <div key={cat.id}>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">{cat.label}</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-3 text-slate-400 font-black">$</span>
+                      <input 
+                        type="number" min="0" step="0.01" required
+                        value={form[cat.id]} 
+                        onChange={(e) => setForm({...form, [cat.id]: e.target.value})} 
+                        className="w-full p-3 pl-7 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-600 outline-none" 
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 mt-2">
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Bolsa Total Autorizada</p>
+                <p className="text-3xl font-black text-emerald-900 mt-1">${presupuestoTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+
           </div>
         </form>
 
         <div className="p-6 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-between items-center gap-3">
           {viajeEdicion ? (
-            <button type="button" onClick={eliminarViaje} disabled={cargando} className="px-6 py-3 bg-red-50 text-red-600 border border-red-200 font-bold rounded-xl text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-2">
-              <Trash2 size={16} /> Borrar Viaje
-            </button>
+            <div className="flex gap-2">
+              <button type="button" onClick={eliminarViaje} disabled={cargando} className="px-4 py-3 bg-red-50 text-red-600 border border-red-200 font-bold rounded-xl text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-2">
+                <Trash2 size={16} /> Borrar Viaje
+              </button>
+              <button type="button" onClick={eliminarSoloImagenes} disabled={cargando} className="px-4 py-3 bg-amber-50 text-amber-700 border border-amber-200 font-bold rounded-xl text-xs uppercase tracking-widest hover:bg-amber-600 hover:text-white transition-all flex items-center gap-2">
+                <Trash2 size={16} /> Borrar Imágenes
+              </button>
+            </div>
           ) : <div></div>}
           
           <div className="flex gap-3">

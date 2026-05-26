@@ -99,23 +99,27 @@ export default function ViajesPage() {
     setIsModalDetalleOpen(true);
   };
 
-  // 🟢 REPORTE PDF DE CIERRE (SE ABRE EN PESTAÑA NUEVA)
+ // 🟢 REPORTE PDF DE CIERRE (MUESTRA SOBRANTE O FALTANTE POR CATEGORÍA)
   const verResumenPDF = (e, viaje) => {
     e.stopPropagation();
 
     const doc = new jsPDF();
-    const totalIntegrantes = viaje.viaje_usuarios?.length || 1;
-    const bolsaTotal = Number(viaje.presupuesto_viaticos);
-    const presupuestoAlimentos = Number(viaje.presupuesto_comidas_diario) * 3 * Number(viaje.dias) * totalIntegrantes;
-    const presupuestoRuta = bolsaTotal - presupuestoAlimentos;
+    
+    // Suma de la Bolsa Total
+    const bolsaTotal = 
+      Number(viaje.presupuesto_gasolina || 0) + 
+      Number(viaje.presupuesto_casetas || 0) + 
+      Number(viaje.presupuesto_alimentos || 0) + 
+      Number(viaje.presupuesto_hospedaje || 0) + 
+      Number(viaje.presupuesto_material || 0) + 
+      Number(viaje.presupuesto_otros || 0);
 
     const gastosAprobados = viaje.viaje_gastos?.filter(g => g.estatus === 'aprobado') || [];
     const totalGastado = gastosAprobados.reduce((acc, g) => acc + Number(g.monto), 0);
     const saldoADevolver = bolsaTotal - totalGastado;
 
     // Títulos
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(18);
     doc.text("LIQUIDACIÓN DE VIÁTICOS - MILAS", 105, 20, { align: "center" });
     
     doc.setFontSize(11);
@@ -124,59 +128,74 @@ export default function ViajesPage() {
     doc.text(`Fechas: ${viaje.fecha_inicio} al ${viaje.fecha_fin} (${viaje.dias} días)`, 14, 38);
     doc.text(`Personal: ${viaje.viaje_usuarios?.map(u => u.perfiles?.nombre).join(", ")}`, 14, 44);
 
-    // Resumen Financiero
-    doc.setFillColor(240, 244, 248);
-    doc.rect(14, 50, 182, 30, 'F');
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text("RESUMEN FINANCIERO", 18, 56);
+    // Resumen Financiero General
+    doc.setFillColor(240, 244, 248); doc.rect(14, 50, 182, 30, 'F');
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("RESUMEN FINANCIERO GENERAL", 18, 56);
     
     doc.setFont("helvetica", "normal");
     doc.text(`Fondo Total Entregado: $${bolsaTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, 18, 63);
     doc.text(`Gastos Comprobados y Aprobados: $${totalGastado.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, 18, 69);
     
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(saldoADevolver >= 0 ? 22 : 220, saldoADevolver >= 0 ? 163 : 38, saldoADevolver >= 0 ? 74 : 38); // Verde si sobra, Rojo si falta
-    doc.text(`SALDO A DEVOLVER (CAMBIO): $${saldoADevolver.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, 18, 76);
+    doc.setTextColor(saldoADevolver >= 0 ? 22 : 220, saldoADevolver >= 0 ? 163 : 38, saldoADevolver >= 0 ? 74 : 38); 
+    doc.text(`SALDO FINAL (CAMBIO): $${saldoADevolver.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, 18, 76);
     doc.setTextColor(0);
 
-    // Detalle de Gastos por Categoría
     let currentY = 90;
-    const categorias = ['Alimentos', 'Gasolina', 'Casetas', 'Materiales', 'Otro'];
 
-    categorias.forEach(cat => {
-      const gastosCat = gastosAprobados.filter(g => g.categoria === cat);
-      if (gastosCat.length > 0) {
+    // 🟢 MATEMÁTICA POR CATEGORÍA
+    const categoriasMapa = [
+      { id: 'Comidas/Alimentos', key: 'presupuesto_alimentos' },
+      { id: 'Gasolina', key: 'presupuesto_gasolina' },
+      { id: 'Casetas', key: 'presupuesto_casetas' },
+      { id: 'Hospedaje', key: 'presupuesto_hospedaje' },
+      { id: 'Material', key: 'presupuesto_material' },
+      { id: 'Otros', key: 'presupuesto_otros' }
+    ];
+
+    categoriasMapa.forEach(cat => {
+      const presupuestoAsignado = Number(viaje[cat.key] || 0);
+      const gastosCat = gastosAprobados.filter(g => g.categoria === cat.id);
+      const totalCat = gastosCat.reduce((acc, g) => acc + Number(g.monto), 0);
+      const balance = presupuestoAsignado - totalCat;
+
+      // Si asignó dinero o hubo gastos, imprimimos la tabla de esa categoría
+      if (presupuestoAsignado > 0 || gastosCat.length > 0) {
+        
         const bodyData = gastosCat.map(g => [
           new Date(g.created_at).toLocaleDateString(),
           g.descripcion,
           `$${Number(g.monto).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
         ]);
 
-        const totalCat = gastosCat.reduce((acc, g) => acc + Number(g.monto), 0);
-        bodyData.push(['', 'TOTAL DE LA CATEGORÍA', `$${totalCat.toLocaleString("en-US", { minimumFractionDigits: 2 })}`]);
+        // FILA DE TOTALES POR CATEGORÍA
+        bodyData.push([
+          '', 
+          `Presupuesto: $${presupuestoAsignado.toLocaleString()} | Gastado: $${totalCat.toLocaleString()} | ${balance >= 0 ? 'SOBRÓ' : 'FALTÓ'}:`, 
+          `$${Math.abs(balance).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+        ]);
 
         autoTable(doc, {
           startY: currentY,
-          head: [[`Categoría: ${cat}`, 'Descripción', 'Monto']],
+          head: [[`Categoría: ${cat.id}`, 'Descripción', 'Monto']],
           body: bodyData,
           theme: 'grid',
           headStyles: { fillColor: [30, 58, 138] },
           styles: { fontSize: 9 },
           columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } },
           willDrawCell: function(data) {
-            // Pintar la última fila de total un poco más oscura
+            // Pintar la última fila del balance (verde si sobró, rojo si faltó)
             if (data.row.index === bodyData.length - 1) {
-              doc.setFillColor(230, 230, 230);
+               doc.setFillColor(balance >= 0 ? 220 : 255, balance >= 0 ? 252 : 224, balance >= 0 ? 231 : 224);
+               doc.setTextColor(balance >= 0 ? 10 : 150, balance >= 0 ? 100 : 20, balance >= 0 ? 40 : 20);
             }
           }
         });
         currentY = doc.lastAutoTable.finalY + 10;
+        doc.setTextColor(0); // Reset color
       }
     });
 
-    // Abrir en nueva pestaña
     const blob = doc.output('blob');
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
