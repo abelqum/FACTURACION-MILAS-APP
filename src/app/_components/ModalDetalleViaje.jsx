@@ -13,24 +13,23 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
 
   if (!isOpen || !viaje) return null;
 
+  // 🟢 Mapeo de Categorías con estilos Tailwind explícitos
   const categoriasPresupuesto = [
-    { id: 'Comidas/Alimentos', key: 'presupuesto_alimentos' },
-    { id: 'Gasolina', key: 'presupuesto_gasolina' },
-    { id: 'Casetas', key: 'presupuesto_casetas' },
-    { id: 'Hospedaje', key: 'presupuesto_hospedaje' },
-    { id: 'Material', key: 'presupuesto_material' },
-    { id: 'Otros', key: 'presupuesto_otros' }
+    { id: 'Comidas/Alimentos', key: 'presupuesto_alimentos', styles: { border: 'border-emerald-200', title: 'text-emerald-600', bar: 'bg-emerald-500', bg: 'bg-white' } },
+    { id: 'Gasolina', key: 'presupuesto_gasolina', styles: { border: 'border-orange-200', title: 'text-orange-600', bar: 'bg-orange-500', bg: 'bg-white' } },
+    { id: 'Casetas', key: 'presupuesto_casetas', styles: { border: 'border-amber-200', title: 'text-amber-600', bar: 'bg-amber-500', bg: 'bg-white' } },
+    { id: 'Hospedaje', key: 'presupuesto_hospedaje', styles: { border: 'border-indigo-200', title: 'text-indigo-600', bar: 'bg-indigo-500', bg: 'bg-white' } },
+    { id: 'Material', key: 'presupuesto_material', styles: { border: 'border-purple-200', title: 'text-purple-600', bar: 'bg-purple-500', bg: 'bg-white' } },
+    { id: 'Otros', key: 'presupuesto_otros', styles: { border: 'border-slate-300', title: 'text-slate-600', bar: 'bg-slate-500', bg: 'bg-white' } }
   ];
 
   const agregarGastoFila = () => setNuevosGastos([...nuevosGastos, { categoria: "", descripcion: "", monto: "", fotoArchivo: null, fotoPreview: null }]);
   const quitarGastoFila = (idx) => setNuevosGastos(nuevosGastos.filter((_, i) => i !== idx));
-
   const actualizarGasto = (idx, campo, valor) => {
     const nuevos = [...nuevosGastos];
     nuevos[idx][campo] = valor;
     setNuevosGastos(nuevos);
   };
-
   const handleFotoChange = (idx, e) => {
     const file = e.target.files[0];
     if (file) {
@@ -63,7 +62,6 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
   };
 
   const handleGuardarTickets = async () => {
-    // 🟢 VALIDACIÓN ACTUALIZADA: La foto ya NO es obligatoria
     const validos = nuevosGastos.filter(g => g.categoria && g.descripcion && g.monto);
     if (validos.length === 0) return Swal.fire("Atención", "Llena Categoría, Descripción y Monto de al menos un ticket.", "warning");
 
@@ -75,7 +73,6 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
 
       for (let gasto of validos) {
         let publicUrl = null;
-
         if (gasto.fotoArchivo) {
           const optimizedFile = await optimizarImagen(gasto.fotoArchivo);
           const fileName = `viaje_${viaje.id}/${Date.now()}_${Math.floor(Math.random() * 1000)}.webp`;
@@ -91,7 +88,7 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
           categoria: gasto.categoria,
           descripcion: gasto.descripcion,
           monto: Number(gasto.monto),
-          foto_ticket_url: publicUrl, // 🟢 Puede ir nulo
+          foto_ticket_url: publicUrl,
           estatus: "pendiente"
         }]);
       }
@@ -107,15 +104,7 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
   };
 
   const eliminarTicket = async (gasto) => {
-    const confirm = await Swal.fire({
-      title: "¿Borrar Comprobante?",
-      text: "Esta acción no se puede deshacer.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      confirmButtonText: "Sí, borrar"
-    });
-
+    const confirm = await Swal.fire({ title: "¿Borrar Comprobante?", text: "Esta acción no se puede deshacer.", icon: "warning", showCancelButton: true, confirmButtonColor: "#ef4444", confirmButtonText: "Sí, borrar" });
     if (confirm.isConfirmed) {
       setCargando(true);
       try {
@@ -126,25 +115,15 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
         }
         await supabase.from("viaje_gastos").delete().eq("id", gasto.id);
         onActualizado();
-      } catch (err) {
-        Swal.fire("Error", "No se pudo borrar el comprobante.", "error");
-      } finally {
-        setCargando(false);
-      }
+      } catch (err) { Swal.fire("Error", "No se pudo borrar el comprobante.", "error"); } 
+      finally { setCargando(false); }
     }
   };
 
   const cambiarEstatusGasto = async (gastoId, nuevoEstatus) => {
     let motivo = null;
     if (nuevoEstatus === 'rechazado') {
-      const { value: razon } = await Swal.fire({
-        title: 'Rechazar Gasto',
-        text: 'Escribe el motivo del rechazo para el empleado:',
-        input: 'textarea',
-        showCancelButton: true,
-        confirmButtonColor: "#ef4444",
-        confirmButtonText: "Rechazar"
-      });
+      const { value: razon } = await Swal.fire({ title: 'Rechazar Gasto', text: 'Motivo del rechazo:', input: 'textarea', showCancelButton: true, confirmButtonColor: "#ef4444", confirmButtonText: "Rechazar" });
       if (!razon) return;
       motivo = razon;
     }
@@ -158,22 +137,15 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
     const pendientes = viaje.viaje_gastos?.filter(g => g.estatus === 'pendiente').length || 0;
     if (pendientes > 0) return Swal.fire("Atención", "Aún tienes tickets pendientes de revisar.", "warning");
 
-    const confirm = await Swal.fire({
-      title: "¿Finalizar Viaje y Cerrar Cuentas?",
-      icon: "warning", showCancelButton: true, confirmButtonColor: "#10b981", confirmButtonText: "Sí, finalizar",
-    });
-
+    const confirm = await Swal.fire({ title: "¿Finalizar Viaje y Cerrar Cuentas?", icon: "warning", showCancelButton: true, confirmButtonColor: "#10b981", confirmButtonText: "Sí, finalizar" });
     if (confirm.isConfirmed) {
       setCargando(true);
       try {
         await supabase.from("viajes").update({ estatus: 'finalizado' }).eq("id", viaje.id);
         Swal.fire({ icon: "success", title: "Viaje Finalizado", toast: true, position: "top-end", timer: 2000, showConfirmButton: false });
         onActualizado();
-      } catch (err) {
-        Swal.fire("Error", "No se pudo finalizar.", "error");
-      } finally {
-        setCargando(false);
-      }
+      } catch (err) { Swal.fire("Error", "No se pudo finalizar.", "error"); } 
+      finally { setCargando(false); }
     }
   };
 
@@ -196,24 +168,39 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
           
-          {/* 🟢 SECCIÓN: 6 TARJETAS DE PRESUPUESTO */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          {/* 🟢 REJILLA A 3 COLUMNAS Y COLORES CORRECTOS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {categoriasPresupuesto.map(cat => {
               const pres = Number(viaje[cat.key] || 0);
               const gastado = viaje.viaje_gastos?.filter(g => g.categoria === cat.id && g.estatus === 'aprobado').reduce((a, g) => a + Number(g.monto), 0) || 0;
               const disp = pres - gastado;
               const porcentaje = pres > 0 ? Math.min((gastado / pres) * 100, 100) : 0;
-              const color = disp < 0 ? 'red' : 'blue';
+              
+              // Lógica de colores fijos
+              const isNeg = disp < 0;
+              const currentStyles = isNeg 
+                ? { border: 'border-red-200', title: 'text-red-600', bar: 'bg-red-500', bg: 'bg-red-50' } 
+                : cat.styles;
 
               return (
-                <div key={cat.id} className={`bg-white border border-${color}-200 rounded-2xl p-3 shadow-sm flex flex-col justify-between`}>
-                  <h4 className={`text-[9px] font-black text-${color}-600 uppercase tracking-widest mb-2 line-clamp-1`}>{cat.id}</h4>
-                  <div>
-                    <p className={`text-sm font-black text-slate-800`}>{formatearDinero(disp)} <span className="text-[8px] text-slate-400 uppercase">Disp.</span></p>
-                    <p className="text-[10px] font-bold text-slate-500 mt-0.5">{formatearDinero(gastado)} / {formatearDinero(pres)}</p>
+                <div key={cat.id} className={`${currentStyles.bg} border ${currentStyles.border} rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-colors`}>
+                  <h4 className={`text-[10px] font-black ${currentStyles.title} uppercase tracking-widest mb-3 line-clamp-1`}>
+                    {cat.id}
+                  </h4>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className={`text-2xl font-black ${isNeg ? 'text-red-700' : 'text-slate-800'}`}>
+                        {formatearDinero(disp)}
+                      </p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Disponible</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-slate-600">{formatearDinero(gastado)} gastado</p>
+                      <p className="text-xs text-slate-400 font-semibold">de {formatearDinero(pres)}</p>
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden">
-                    <div className={`h-full bg-${color}-500`} style={{ width: `${porcentaje}%` }}></div>
+                  <div className="w-full bg-slate-200/50 h-2 mt-3 rounded-full overflow-hidden">
+                    <div className={`h-full ${currentStyles.bar}`} style={{ width: `${porcentaje}%` }}></div>
                   </div>
                 </div>
               );
@@ -278,7 +265,6 @@ export default function ModalDetalleViaje({ isOpen, onClose, viaje, onActualizad
               viaje.viaje_gastos?.map(g => (
                 <div key={g.id} className={`flex flex-col md:flex-row justify-between md:items-center p-4 rounded-xl border gap-4 transition-colors ${g.estatus === 'rechazado' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
                   <div className="flex gap-4 items-center w-full md:w-auto">
-                    {/* 🟢 SI HAY FOTO LA MUESTRA, SI NO, UN ICONO GRIS */}
                     {g.foto_ticket_url ? (
                       <a href={g.foto_ticket_url} target="_blank" className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden relative group block shrink-0 shadow-sm">
                         <img src={g.foto_ticket_url} className="w-full h-full object-cover" />

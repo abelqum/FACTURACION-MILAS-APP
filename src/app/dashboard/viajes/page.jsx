@@ -99,13 +99,11 @@ export default function ViajesPage() {
     setIsModalDetalleOpen(true);
   };
 
- // 🟢 REPORTE PDF DE CIERRE (MUESTRA SOBRANTE O FALTANTE POR CATEGORÍA)
   const verResumenPDF = (e, viaje) => {
     e.stopPropagation();
-
     const doc = new jsPDF();
     
-    // Suma de la Bolsa Total
+    // 🟢 SUMA CORRECTA DE LOS 6 RUBROS PARA LA BOLSA TOTAL
     const bolsaTotal = 
       Number(viaje.presupuesto_gasolina || 0) + 
       Number(viaje.presupuesto_casetas || 0) + 
@@ -118,8 +116,8 @@ export default function ViajesPage() {
     const totalGastado = gastosAprobados.reduce((acc, g) => acc + Number(g.monto), 0);
     const saldoADevolver = bolsaTotal - totalGastado;
 
-    // Títulos
-    doc.setFont("helvetica", "bold"); doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
     doc.text("LIQUIDACIÓN DE VIÁTICOS - MILAS", 105, 20, { align: "center" });
     
     doc.setFontSize(11);
@@ -128,9 +126,12 @@ export default function ViajesPage() {
     doc.text(`Fechas: ${viaje.fecha_inicio} al ${viaje.fecha_fin} (${viaje.dias} días)`, 14, 38);
     doc.text(`Personal: ${viaje.viaje_usuarios?.map(u => u.perfiles?.nombre).join(", ")}`, 14, 44);
 
-    // Resumen Financiero General
-    doc.setFillColor(240, 244, 248); doc.rect(14, 50, 182, 30, 'F');
-    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("RESUMEN FINANCIERO GENERAL", 18, 56);
+    doc.setFillColor(240, 244, 248);
+    doc.rect(14, 50, 182, 30, 'F');
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("RESUMEN FINANCIERO GENERAL", 18, 56);
     
     doc.setFont("helvetica", "normal");
     doc.text(`Fondo Total Entregado: $${bolsaTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, 18, 63);
@@ -143,7 +144,6 @@ export default function ViajesPage() {
 
     let currentY = 90;
 
-    // 🟢 MATEMÁTICA POR CATEGORÍA
     const categoriasMapa = [
       { id: 'Comidas/Alimentos', key: 'presupuesto_alimentos' },
       { id: 'Gasolina', key: 'presupuesto_gasolina' },
@@ -159,16 +159,13 @@ export default function ViajesPage() {
       const totalCat = gastosCat.reduce((acc, g) => acc + Number(g.monto), 0);
       const balance = presupuestoAsignado - totalCat;
 
-      // Si asignó dinero o hubo gastos, imprimimos la tabla de esa categoría
       if (presupuestoAsignado > 0 || gastosCat.length > 0) {
-        
         const bodyData = gastosCat.map(g => [
           new Date(g.created_at).toLocaleDateString(),
           g.descripcion,
           `$${Number(g.monto).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
         ]);
 
-        // FILA DE TOTALES POR CATEGORÍA
         bodyData.push([
           '', 
           `Presupuesto: $${presupuestoAsignado.toLocaleString()} | Gastado: $${totalCat.toLocaleString()} | ${balance >= 0 ? 'SOBRÓ' : 'FALTÓ'}:`, 
@@ -184,7 +181,6 @@ export default function ViajesPage() {
           styles: { fontSize: 9 },
           columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } },
           willDrawCell: function(data) {
-            // Pintar la última fila del balance (verde si sobró, rojo si faltó)
             if (data.row.index === bodyData.length - 1) {
                doc.setFillColor(balance >= 0 ? 220 : 255, balance >= 0 ? 252 : 224, balance >= 0 ? 231 : 224);
                doc.setTextColor(balance >= 0 ? 10 : 150, balance >= 0 ? 100 : 20, balance >= 0 ? 40 : 20);
@@ -192,7 +188,7 @@ export default function ViajesPage() {
           }
         });
         currentY = doc.lastAutoTable.finalY + 10;
-        doc.setTextColor(0); // Reset color
+        doc.setTextColor(0); 
       }
     });
 
@@ -242,7 +238,14 @@ export default function ViajesPage() {
           </div>
         ) : (
           viajes.map((viaje) => {
-            const presupuestoTotalEstimado = Number(viaje.presupuesto_viaticos);
+            // 🟢 SUMATORIA GENERAL CORREGIDA PARA LA TARJETA
+            const presupuestoTotalEstimado = 
+              Number(viaje.presupuesto_gasolina || 0) + 
+              Number(viaje.presupuesto_casetas || 0) + 
+              Number(viaje.presupuesto_alimentos || 0) + 
+              Number(viaje.presupuesto_hospedaje || 0) + 
+              Number(viaje.presupuesto_material || 0) + 
+              Number(viaje.presupuesto_otros || 0);
 
             const gastosAprobados = viaje.viaje_gastos
               ?.filter(g => g.estatus === 'aprobado')
@@ -256,7 +259,6 @@ export default function ViajesPage() {
                 onClick={() => abrirDetalles(viaje)}
                 className={`bg-white border ${viaje.estatus === 'finalizado' ? 'border-emerald-300 shadow-emerald-100' : 'border-slate-200'} rounded-3xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group relative`}
               >
-                {/* 🟢 BOTONES SUPERIORES */}
                 <div className="absolute top-4 right-4 flex gap-2 z-10">
                   {viaje.estatus === 'finalizado' && (
                     <button 
@@ -267,7 +269,7 @@ export default function ViajesPage() {
                       <Eye size={16} />
                     </button>
                   )}
-                  {rolUsuario === "admin"  && (
+                  {rolUsuario === "admin" && viaje.estatus !== 'finalizado' && (
                     <button 
                       onClick={(e) => abrirEditarViaje(e, viaje)}
                       className="p-2 bg-slate-50 border border-slate-200 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
@@ -306,7 +308,7 @@ export default function ViajesPage() {
                 <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-                      <DollarSign size={10} /> Presupuesto
+                      <DollarSign size={10} /> Bolsa Total
                     </p>
                     <p className="text-sm font-black text-slate-700">
                       ${presupuestoTotalEstimado.toLocaleString("en-US", { minimumFractionDigits: 2 })}
