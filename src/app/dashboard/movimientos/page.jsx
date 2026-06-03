@@ -369,7 +369,7 @@ export default function MovimientosPage() {
               setFiltroOperacion(e.target.value);
               setPaginaActual(1);
             }}
-            className="flex-1 bg-slate-50 border-none rounded-xl text-xs font-black uppercase tracking-widest p-2.5 outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer min-w-max"
+            className="flex-1 bg-slate-800  border-none rounded-xl text-xs font-white uppercase tracking-widest p-2.5 outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer min-w-max"
           >
             <option value="ambos">Entradas y Salidas</option>
             <option value="entrada">Solo Entradas</option>
@@ -383,7 +383,7 @@ export default function MovimientosPage() {
               setMesFiltro(e.target.value);
               setPaginaActual(1);
             }}
-            className="flex-1 bg-slate-50 border-none rounded-xl text-xs font-black uppercase tracking-widest p-2.5 outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
+            className="flex-1 bg-slate-800 border-none rounded-xl text-xs font-slate-800 uppercase tracking-widest p-2.5 outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
           >
             {meses.map((m) => (
               <option key={m.v} value={m.v}>
@@ -400,7 +400,7 @@ export default function MovimientosPage() {
               setAnioFiltro(e.target.value);
               setPaginaActual(1);
             }}
-            className="w-24 bg-slate-50 border-none rounded-xl text-xs font-black p-2.5 outline-none focus:ring-2 focus:ring-blue-600 text-center"
+            className="w-24 bg-slate-800 border-none rounded-xl text-xs font-slate-800 uppercase tracking-widest p-2.5 outline-none focus:ring-2 focus:ring-blue-600 text-center"
           />
         </div>
       </div>
