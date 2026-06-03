@@ -579,6 +579,7 @@ export default function InventarioPage() {
                 <th className="p-4">Proveedor</th>
                 <th className="p-4 text-center">Enlace</th>
                 <th className="p-4">Ubicación</th>
+                <th className="p-4 text-center">Precio Unit.</th> 
                 <th className="p-4 text-center">Cant.</th>
                 <th className="p-4 text-center">Estatus</th>
                 <th className="p-4 text-center">Acciones</th>
@@ -678,6 +679,11 @@ export default function InventarioPage() {
                       <td className="p-4">
                         <p className="font-bold text-slate-700 text-xs">{p.almacen?.nombre || (p.es_kit ? "Zona de Kits" : "N/A")}</p>
                         <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Fila: {p.fila || "N/A"}</p>
+                      </td>
+                      <td className="p-4 text-center">
+                        <p className="font-black text-slate-700 text-sm">
+                          ${Number(p.precio_unitario || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </p>
                       </td>
                       <td className="p-4 text-center">
                         <span className={`text-base font-black ${p.es_kit ? "text-indigo-700" : solicitar ? "text-red-600" : "text-blue-700"}`}>{p.cantidad}</span>
