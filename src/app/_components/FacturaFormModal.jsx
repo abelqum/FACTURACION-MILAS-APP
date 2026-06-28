@@ -75,15 +75,23 @@ export default function FacturaFormModal({
     return () => clearTimeout(timer);
   }, [facturaAEditar, isOpen, clientes]);
 
-  // 🟢 2. Cálculos Financieros Automáticos
+  // 🟢 2. Cálculos Financieros Automáticos (CORREGIDO PARA ACEPTAR 0 Y VACÍOS)
   const handleTotalChange = (e) => {
     const rawValue = e.target.value;
-    const numValue = parseFloat(rawValue);
 
-    if (isNaN(numValue) || numValue <= 0) {
-      setFormData({ ...formData, total: rawValue, subtotal: "", iva: "" });
+    if (rawValue === "") {
+      setFormData({ ...formData, total: "", subtotal: "", iva: "" });
       return;
     }
+
+    const numValue = parseFloat(rawValue);
+
+    if (numValue === 0) {
+      setFormData({ ...formData, total: rawValue, subtotal: "0.00", iva: "0.00" });
+      return;
+    }
+
+    if (isNaN(numValue) || numValue < 0) return;
 
     const calculadoSubtotal = (numValue / 1.16).toFixed(2);
     const calculadoIva = (numValue - calculadoSubtotal).toFixed(2);
@@ -120,13 +128,16 @@ export default function FacturaFormModal({
     setIsLoading(true);
 
     try {
+      // 🟢 REGLA DE NEGOCIO: Si está cancelada, todo el dinero vale 0 forzosamente.
+      const isCancelada = formData.estado_id === "3";
+
       const payload = {
         cliente_id: parseInt(formData.cliente_id),
         no_factura: parseInt(formData.no_factura),
         fecha: formData.fecha,
-        subtotal: parseFloat(formData.subtotal),
-        iva: parseFloat(formData.iva),
-        total: parseFloat(formData.total),
+        subtotal: isCancelada ? 0 : (parseFloat(formData.subtotal) || 0),
+        iva: isCancelada ? 0 : (parseFloat(formData.iva) || 0),
+        total: isCancelada ? 0 : (parseFloat(formData.total) || 0),
         estado_id: parseInt(formData.estado_id),
         forma_pago_id: formData.forma_pago_id
           ? parseInt(formData.forma_pago_id)
@@ -271,10 +282,12 @@ export default function FacturaFormModal({
                 <label className="block text-[11px] font-bold text-blue-800 uppercase tracking-wider mb-1.5">
                   Total a Pagar ($) *
                 </label>
+                {/* 🟢 INPUT ACTUALIZADO (min="0") */}
                 <input
                   type="number"
+                  min="0"
                   step="0.01"
-                  required
+                  required={formData.estado_id !== "3"}
                   value={formData.total}
                   onChange={handleTotalChange}
                   onWheel={(e) => e.target.blur()}
@@ -345,9 +358,11 @@ export default function FacturaFormModal({
                 <select
                   required
                   value={formData.estado_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, estado_id: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const nuevoEstado = e.target.value;
+                    // Si seleccionan cancelado y quieren vaciar el total, se puede hacer, pero ya forzamos a 0 en el submit
+                    setFormData({ ...formData, estado_id: nuevoEstado });
+                  }}
                   className={`w-full border p-3 rounded-lg outline-none focus:ring-2 text-sm font-bold transition-all  bg-slate-50 border border-slate-300 cursor-pointer ${
                     formData.estado_id === "2"
                       ? "bg-green-50 border-green-300 text-green-700 focus:border-green-600 focus:ring-green-600"
