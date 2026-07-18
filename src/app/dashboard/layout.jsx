@@ -1,283 +1,477 @@
 "use client";
-import { useEffect, useState } from "react";
-import { supabase } from "@/app/_lib/supabase/supabase";
-import { useRouter, usePathname } from "next/navigation";
+
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  BarChart3,
+  Boxes,
+  CalendarDays,
+  CheckSquare,
+  ChevronLeft,
+  ChevronRight,
+  CircleDollarSign,
+  FileText,
+  Globe2,
+  Home,
+  LogOut,
+  Mail,
+  Menu,
+  ReceiptText,
+  Settings,
+  Truck,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
+import { supabase } from "@/app/_lib/supabase/supabase";
 import "@/app/globals.css";
+
+const LINKS = [
+  {
+    name: "Inicio",
+    href: "/dashboard",
+    icon: Home,
+    roles: ["admin", "editor", "empleado"],
+  },
+  {
+    name: "Tareas",
+    href: "/dashboard/tareas",
+    icon: CheckSquare,
+    roles: ["admin", "editor", "empleado"],
+  },
+  {
+    name: "Inventario",
+    href: "/dashboard/inventario",
+    icon: Boxes,
+    roles: ["admin", "empleado"],
+  },
+  {
+    name: "Movimientos",
+    href: "/dashboard/movimientos",
+    icon: CalendarDays,
+    roles: ["admin", "empleado"],
+  },
+  {
+    name: "Facturas",
+    href: "/dashboard/facturas",
+    icon: FileText,
+    roles: ["admin", "editor"],
+  },
+  {
+    name: "Gastos",
+    href: "/dashboard/gastos",
+    icon: CircleDollarSign,
+    roles: ["admin", "editor"],
+  },
+  {
+    name: "Viajes",
+    href: "/dashboard/viajes",
+    icon: Truck,
+    roles: ["admin", "empleado"],
+  },
+  {
+    name: "Directorio de Clientes",
+    href: "/dashboard/clientes",
+    icon: UserRound,
+    roles: ["admin", "editor"],
+  },
+  {
+    name: "Correo",
+    href: "/dashboard/correo",
+    icon: Mail,
+    roles: ["admin"],
+  },
+  {
+    name: "Usuarios",
+    href: "/dashboard/usuarios",
+    icon: Users,
+    roles: ["admin"],
+  },
+  {
+    name: "Configuración",
+    href: "/dashboard/configuracion",
+    icon: Settings,
+    roles: ["admin", "empleado"],
+  },
+];
 
 export default function DashboardLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState(null);
-  const [userRole, setUserRole] = useState(null); // 🟢 ESTADO PARA EL ROL
 
-  // ESTADO DEL MENÚ LATERAL
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [usuario, setUsuario] = useState(null);
+  const [rol, setRol] = useState(null);
+  const [cargando, setCargando] = useState(true);
 
-  // 1. Efecto exclusivo para la Autenticación
+  const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+  const [sidebarContraido, setSidebarContraido] = useState(false);
+
   useEffect(() => {
-    const checkUser = async () => {
+    let componenteActivo = true;
+
+    const verificarSesion = async () => {
       try {
         const {
           data: { session },
-          error,
+          error: errorSesion,
         } = await supabase.auth.getSession();
 
-        if (error || !session) {
-          if (error) await supabase.auth.signOut();
-          router.push("/");
-        } else {
-          // 🟢 BUSCAMOS EL ROL DEL USUARIO EN LA TABLA PERFILES
-          const { data: perfil } = await supabase
-            .from("perfiles")
-            .select("rol, nombre")
-            .eq("id", session.user.id)
-            .single();
+        if (errorSesion || !session) {
+          await supabase.auth.signOut();
 
-          setUser({ ...session.user, nombre: perfil?.nombre });
-          setUserRole(perfil?.rol || "empleado"); // Por defecto si no tiene, es empleado
+          if (componenteActivo) {
+            router.replace("/");
+          }
+
+          return;
         }
-      } catch (err) {
+
+        const { data: perfil, error: errorPerfil } = await supabase
+          .from("perfiles")
+          .select("id, nombre, rol")
+          .eq("id", session.user.id)
+          .single();
+
+        if (errorPerfil) {
+          throw errorPerfil;
+        }
+
+        if (componenteActivo) {
+          setUsuario({
+            id: session.user.id,
+            email: session.user.email,
+            nombre: perfil?.nombre ?? session.user.email,
+          });
+
+          setRol(perfil?.rol ?? "empleado");
+        }
+      } catch (error) {
+        console.error("Error verificando la sesión:", error);
+
         await supabase.auth.signOut();
-        router.push("/");
-      }
-    };
-    checkUser();
-  }, [router]);
 
-  // 2. Efecto exclusivo para el Menú Responsivo
-  useEffect(() => {
-    const checkScreenSize = () => {
-      if (window.innerWidth >= 768) {
-        setIsSidebarOpen(true);
-      } else {
-        setIsSidebarOpen(false);
+        if (componenteActivo) {
+          router.replace("/");
+        }
+      } finally {
+        if (componenteActivo) {
+          setCargando(false);
+        }
       }
     };
 
-    const timer = setTimeout(() => {
-      if (window.innerWidth >= 768) setIsSidebarOpen(true);
-    }, 10);
+    void verificarSesion();
 
-    window.addEventListener("resize", checkScreenSize);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((evento, session) => {
+      if (evento === "SIGNED_OUT" || !session) {
+        router.replace("/");
+      }
+    });
 
     return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", checkScreenSize);
+      componenteActivo = false;
+      subscription.unsubscribe();
     };
-  }, []);
+  }, [router]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
-  };
+  useEffect(() => {
+    setMenuMovilAbierto(false);
+  }, [pathname]);
 
-  // 🟢 RUTAS ACTUALIZADAS CON PROTECCIÓN
-  const allLinks = [
-    {
-      name: "Inicio",
-      href: "/dashboard",
-      icon: "🏠",
-      roles: ["admin", "editor", "empleado"],
-    },
-    {
-      name: "Tareas",
-      href: "/dashboard/tareas",
-      icon: "✅",
-      roles: ["admin", "editor", "empleado"],
-    }, // 🟢 Nueva ruta
-    {
-      name: "Inventario",
-      href: "/dashboard/inventario",
-      icon: "📦",
-      roles: ["admin", "empleado"],
-    },
-    {
-      name: "Movimientos",
-      href: "/dashboard/movimientos",
-      icon: "📅",
-      roles: ["admin", "empleado"],
-    },
-    {
-      name: "Facturas",
-      href: "/dashboard/facturas",
-      icon: "📄",
-      roles: ["admin", "editor"],
-    },
-     {
-      name: "Viajes",
-      href: "/dashboard/viajes",
-      icon: "🚗",
-      roles: ["admin", "empleado"],
-    },
-    {
-      name: "Directorio de Clientes",
-      href: "/dashboard/clientes",
-      icon: "📇",
-      roles: ["admin", "editor"],
-    },
-
-    {
-      name: "Correo",
-      href: "/dashboard/correo",
-      icon: "✉️",
-      roles: ["admin"],
-    },
-    {
-      name: "Usuarios",
-      href: "/dashboard/usuarios",
-      icon: "👥",
-      roles: ["admin"],
-    },
-    {
-      name: "Configuración",
-      href: "/dashboard/configuracion",
-      icon: "⚙️",
-      roles: ["admin", "empleado"],
-    },
-  ];
-
-  // 🟢 Filtramos el menú para que solo se muestre lo que su rol permite
-  const navLinks = allLinks.filter(
-    (link) => userRole && link.roles.includes(userRole),
+  const linksPermitidos = useMemo(
+    () =>
+      LINKS.filter(
+        (link) => rol && link.roles.includes(rol),
+      ),
+    [rol],
   );
 
-  return (
-    /* 🟢 CORRECCIÓN: Usamos un div contenedor en lugar de html/body para no romper Next.js */
-    <div className="bg-slate-50 flex min-h-screen w-full">
-      {!user ? (
-        <div className="w-full flex-1 flex items-center justify-center bg-slate-50 text-blue-950 font-bold text-xl">
-          Cargando interfaz...
+  const tituloActual = useMemo(() => {
+    const coincidenciaExacta = linksPermitidos.find(
+      (link) => link.href === pathname,
+    );
+
+    if (coincidenciaExacta) {
+      return coincidenciaExacta.name;
+    }
+
+    const coincidenciaParcial = linksPermitidos.find(
+      (link) =>
+        link.href !== "/dashboard" &&
+        pathname.startsWith(link.href),
+    );
+
+    return coincidenciaParcial?.name ?? "Panel";
+  }, [linksPermitidos, pathname]);
+
+  const cerrarSesion = async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.replace("/");
+    }
+  };
+
+  if (cargando) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <div className="mx-auto h-11 w-11 animate-spin rounded-full border-4 border-blue-700 border-t-transparent" />
+
+          <p className="mt-4 text-sm font-black uppercase tracking-widest text-blue-950">
+            Cargando interfaz
+          </p>
         </div>
-      ) : (
-        <>
-          {/* OVERLAY OSCURO PARA MÓVILES */}
-          {isSidebarOpen && (
-            <div
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
-              onClick={() => setIsSidebarOpen(false)}
-            />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen w-full bg-slate-100">
+      {menuMovilAbierto && (
+        <button
+          type="button"
+          aria-label="Cerrar menú"
+          onClick={() => setMenuMovilAbierto(false)}
+          className="fixed inset-0 z-40 bg-slate-950/65 backdrop-blur-sm lg:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-blue-950 text-white shadow-2xl transition-all duration-300 lg:sticky lg:top-0 lg:h-screen ${
+          menuMovilAbierto
+            ? "translate-x-0"
+            : "-translate-x-full lg:translate-x-0"
+        } ${
+          sidebarContraido
+            ? "w-72 lg:w-24"
+            : "w-72"
+        }`}
+      >
+        <div
+          className={`flex h-18 shrink-0 items-center border-b border-blue-800 px-5 ${
+            sidebarContraido
+              ? "justify-between lg:justify-center"
+              : "justify-between"
+          }`}
+        >
+          <div
+            className={`min-w-0 ${
+              sidebarContraido ? "lg:hidden" : ""
+            }`}
+          >
+            <h2 className="text-2xl font-black tracking-[0.25em] text-white">
+              MILAS
+            </h2>
+
+            <p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-blue-300">
+              Panel administrativo
+            </p>
+          </div>
+
+          {sidebarContraido && (
+            <div className="hidden h-11 w-11 items-center justify-center rounded-xl bg-blue-700 text-xl font-black lg:flex">
+              M
+            </div>
           )}
 
-          {/* SIDEBAR RESPONSIVO Y OCULTABLE */}
-          <aside
-            className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-blue-950
-               text-white flex flex-col shadow-2xl  transition-all duration-300 ease-in-out ${
-                 isSidebarOpen
-                   ? "translate-x-0 md:ml-0"
-                   : "-translate-x-full md:-ml-72"
-               }`}
+          <button
+            type="button"
+            onClick={() => setMenuMovilAbierto(false)}
+            className="rounded-xl bg-blue-900 p-2 text-blue-200 transition hover:bg-blue-800 hover:text-white lg:hidden"
           >
-            <div className="flex h-16 items-center justify-between px-6 border-b border-blue-800 bg-blue-950 shrink-0">
-              <h2 className="text-2xl  text-center font-black tracking-widest text-white">
-                MILAS
-              </h2>
-              <button
-                onClick={() => setIsSidebarOpen(false)}
-                className="md:hidden text-blue-300 hover:text-white bg-blue-800/50 hover:bg-blue-700 p-2 rounded-lg transition-colors"
+            <X size={21} />
+          </button>
+        </div>
+
+        <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-5">
+          {linksPermitidos.map((link) => {
+            const Icono = link.icon;
+
+            const activo =
+              pathname === link.href ||
+              (link.href !== "/dashboard" &&
+                pathname.startsWith(link.href));
+
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                title={
+                  sidebarContraido
+                    ? link.name
+                    : undefined
+                }
+                className={`group flex items-center rounded-xl py-3 transition-all ${
+                  sidebarContraido
+                    ? "justify-center px-3"
+                    : "gap-3 px-4"
+                } ${
+                  activo
+                    ? "bg-blue-700 text-white shadow-lg shadow-blue-950/30"
+                    : "text-blue-100 hover:bg-blue-900 hover:text-white"
+                }`}
               >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                <Icono
+                  size={20}
+                  className="shrink-0"
+                />
+
+                <span
+                  className={`truncate text-sm font-bold ${
+                    sidebarContraido
+                      ? "lg:hidden"
+                      : ""
+                  }`}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+                  {link.name}
+                </span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="shrink-0 space-y-2 border-t border-blue-800 p-3">
+          <Link
+            href="https://www.milas.com.mx"
+            target="_blank"
+            rel="noreferrer"
+            title={
+              sidebarContraido
+                ? "Ver sitio público"
+                : undefined
+            }
+            className={`flex items-center rounded-xl py-3 text-blue-200 transition hover:bg-blue-900 hover:text-white ${
+              sidebarContraido
+                ? "justify-center px-3"
+                : "gap-3 px-4"
+            }`}
+          >
+            <Globe2 size={20} />
+
+            <span
+              className={`text-sm font-bold ${
+                sidebarContraido
+                  ? "lg:hidden"
+                  : ""
+              }`}
+            >
+              Ver sitio público
+            </span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={cerrarSesion}
+            title={
+              sidebarContraido
+                ? "Cerrar sesión"
+                : undefined
+            }
+            className={`flex w-full items-center rounded-xl py-3 text-red-200 transition hover:bg-red-500/20 hover:text-white ${
+              sidebarContraido
+                ? "justify-center px-3"
+                : "gap-3 px-4"
+            }`}
+          >
+            <LogOut size={20} />
+
+            <span
+              className={`text-sm font-bold ${
+                sidebarContraido
+                  ? "lg:hidden"
+                  : ""
+              }`}
+            >
+              Cerrar sesión
+            </span>
+          </button>
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-18 shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur md:px-7">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() =>
+                setMenuMovilAbierto(true)
+              }
+              className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 lg:hidden"
+            >
+              <Menu size={21} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setSidebarContraido(
+                  (actual) => !actual,
+                )
+              }
+              className="hidden rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 lg:block"
+              title={
+                sidebarContraido
+                  ? "Expandir menú"
+                  : "Contraer menú"
+              }
+            >
+              {sidebarContraido ? (
+                <ChevronRight size={20} />
+              ) : (
+                <ChevronLeft size={20} />
+              )}
+            </button>
+
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-black text-blue-950 md:text-lg">
+                {tituloActual}
+              </h1>
+
+              <p className="hidden text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:block">
+                MILAS Equipos Industriales
+              </p>
+            </div>
+          </div>
+
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="hidden min-w-0 text-right sm:block">
+              <p className="max-w-52 truncate text-sm font-bold text-slate-700">
+                {usuario?.nombre ??
+                  usuario?.email}
+              </p>
+
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">
+                {rol}
+              </p>
             </div>
 
-            <nav className="flex-1 py-6 px-4 flex flex-col gap-2 overflow-y-auto scrollbar-none">
-              {navLinks.map((link) => {
-                const isActive = pathname === link.href;
-                return (
-                  <Link
-                    key={link.name}
-                    href={link.href}
-                    onClick={() =>
-                      window.innerWidth < 768 && setIsSidebarOpen(false)
-                    }
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all whitespace-nowrap ${
-                      isActive
-                        ? "bg-blue-700 text-white shadow-md border border-blue-600/50"
-                        : "text-blue-100 hover:bg-blue-800 hover:text-white"
-                    }`}
-                  >
-                    <span className="text-xl">{link.icon}</span>
-                    <span>{link.name}</span>
-                  </Link>
-                );
-              })}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 font-black text-blue-700">
+              {(usuario?.nombre ??
+                usuario?.email ??
+                "U")
+                .charAt(0)
+                .toUpperCase()}
+            </div>
 
-              <Link
-                href="https://www.milas.com.mx"
-                target="_blank"
-                className="mt-auto flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-blue-200 hover:bg-blue-800 transition-all border border-blue-700/50"
-              >
-                <span>🌐</span> Ver Sitio Público
-              </Link>
-            </nav>
-          </aside>
-
-          {/* CONTENEDOR PRINCIPAL */}
-          <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
-            {/* HEADER */}
-            <header className="h-16 bg-white border-b flex items-center justify-between px-4 md:px-8 shadow-sm z-10 flex-shrink-0">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className="text-slate-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded-lg transition-colors focus:outline-none"
-                >
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
-                  </svg>
-                </button>
-                <h1 className="text-base md:text-lg font-bold text-blue-950 truncate">
-                  {navLinks.find((l) => l.href === pathname)?.name || "Panel"}
-                </h1>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex flex-col items-end">
-                  <span className="hidden md:inline text-sm font-medium text-slate-600">
-                    {user?.nombre || user?.email}
-                  </span>
-                  {/* 🟢 Mostramos el rol debajo del nombre de usuario */}
-                  <span className="hidden md:inline text-[10px] font-bold text-blue-700 uppercase tracking-widest">
-                    {userRole}
-                  </span>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="text-xs md:text-sm font-bold text-red-600 hover:text-red-800 transition-colors bg-red-50 px-4 py-2 rounded-lg"
-                >
-                  Salir
-                </button>
-              </div>
-            </header>
-
-            {/* ÁREA DE CONTENIDO DINÁMICO */}
-            <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-100/50">
-              {children}
-            </main>
+            <button
+              type="button"
+              onClick={cerrarSesion}
+              className="hidden items-center gap-2 rounded-xl bg-red-50 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-red-700 transition hover:bg-red-100 md:flex"
+            >
+              <LogOut size={15} />
+              Salir
+            </button>
           </div>
-        </>
-      )}
+        </header>
+
+        <main className="flex-1 overflow-x-hidden bg-slate-100/80 p-4 md:p-7 lg:p-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
