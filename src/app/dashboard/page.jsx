@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -36,7 +30,7 @@ import {
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 import Swal from "sweetalert2";
 import { supabase } from "@/app/_lib/supabase/supabase";
 import ModalReporteDashboard from "@/app/_components/ModalReporteDashboard";
@@ -99,13 +93,7 @@ const fechaGasto = (valor) => {
 
 const convertirPeriodo = (anio, mes) => Number(anio) * 12 + Number(mes);
 
-const fechaDentroPeriodo = (
-  fecha,
-  anioInicio,
-  mesInicio,
-  anioFin,
-  mesFin,
-) => {
+const fechaDentroPeriodo = (fecha, anioInicio, mesInicio, anioFin, mesFin) => {
   if (!fecha) return false;
 
   const periodoFecha = convertirPeriodo(fecha.getFullYear(), fecha.getMonth());
@@ -115,12 +103,7 @@ const fechaDentroPeriodo = (
   return periodoFecha >= inicio && periodoFecha <= fin;
 };
 
-function ToggleSerie({
-  activo,
-  nombre,
-  color,
-  onClick,
-}) {
+function ToggleSerie({ activo, nombre, color, onClick }) {
   return (
     <button
       type="button"
@@ -179,20 +162,14 @@ export default function Dashboard() {
   const [misTareas, setMisTareas] = useState([]);
   const [cargando, setCargando] = useState(true);
 
-  const [seriesHistoricas, setSeriesHistoricas] =
-    useState(SERIES_INICIALES);
+  const [seriesHistoricas, setSeriesHistoricas] = useState(SERIES_INICIALES);
 
-  const [seriesMensuales, setSeriesMensuales] =
-    useState(SERIES_INICIALES);
+  const [seriesMensuales, setSeriesMensuales] = useState(SERIES_INICIALES);
 
-  const [anioMensual, setAnioMensual] = useState(
-    hoyRef.current.getFullYear(),
-  );
+  const [anioMensual, setAnioMensual] = useState(hoyRef.current.getFullYear());
 
   const [mesInicio, setMesInicio] = useState(hoyRef.current.getMonth());
-  const [anioInicio, setAnioInicio] = useState(
-    hoyRef.current.getFullYear(),
-  );
+  const [anioInicio, setAnioInicio] = useState(hoyRef.current.getFullYear());
 
   const [mesFin, setMesFin] = useState(hoyRef.current.getMonth());
   const [anioFin, setAnioFin] = useState(hoyRef.current.getFullYear());
@@ -249,10 +226,12 @@ export default function Dashboard() {
           await Promise.all([
             supabase
               .from("facturas")
-              .select(`
+              .select(
+                `
                 *,
                 estados_factura(nombre)
-              `)
+              `,
+              )
               .order("fecha", { ascending: true }),
 
             supabase
@@ -262,10 +241,12 @@ export default function Dashboard() {
 
             supabase
               .from("viaje_gastos")
-              .select(`
+              .select(
+                `
                 *,
                 viajes(nombre, destino)
-              `)
+              `,
+              )
               .eq("estatus", "aprobado")
               .order("created_at", { ascending: true }),
           ]);
@@ -280,10 +261,12 @@ export default function Dashboard() {
       } else {
         const { data, error } = await supabase
           .from("tareas")
-          .select(`
+          .select(
+            `
             *,
             creador:perfiles!tareas_creado_por_fkey(nombre)
-          `)
+          `,
+          )
           .contains("asignados_ids", [perfil.id])
           .neq("estado", "completada")
           .order("fecha_limite", {
@@ -335,12 +318,7 @@ export default function Dashboard() {
   }, [facturas, gastosManuales, gastosViajes]);
 
   const obtenerTotalesPeriodo = useCallback(
-    (
-      periodoAnioInicio,
-      periodoMesInicio,
-      periodoAnioFin,
-      periodoMesFin,
-    ) => {
+    (periodoAnioInicio, periodoMesInicio, periodoAnioFin, periodoMesFin) => {
       const resumen = {
         ingresos: 0,
         pendiente: 0,
@@ -411,9 +389,7 @@ export default function Dashboard() {
       resumen.gastos = resumen.gastosManuales + resumen.viaticos;
       resumen.utilidad = resumen.ingresos - resumen.gastos;
       resumen.margen =
-        resumen.ingresos > 0
-          ? (resumen.utilidad / resumen.ingresos) * 100
-          : 0;
+        resumen.ingresos > 0 ? (resumen.utilidad / resumen.ingresos) * 100 : 0;
 
       return resumen;
     },
@@ -472,12 +448,7 @@ export default function Dashboard() {
       };
     }
 
-    return obtenerTotalesPeriodo(
-      anioInicio,
-      mesInicio,
-      anioFin,
-      mesFin,
-    );
+    return obtenerTotalesPeriodo(anioInicio, mesInicio, anioFin, mesFin);
   }, [
     anioFin,
     anioInicio,
@@ -911,9 +882,7 @@ export default function Dashboard() {
               activo={seriesHistoricas.ingresos}
               nombre="Ingresos"
               color="bg-emerald-600"
-              onClick={() =>
-                cambiarSerie(setSeriesHistoricas, "ingresos")
-              }
+              onClick={() => cambiarSerie(setSeriesHistoricas, "ingresos")}
             />
 
             <ToggleSerie
@@ -927,9 +896,7 @@ export default function Dashboard() {
               activo={seriesHistoricas.utilidad}
               nombre="Utilidad"
               color="bg-blue-700"
-              onClick={() =>
-                cambiarSerie(setSeriesHistoricas, "utilidad")
-              }
+              onClick={() => cambiarSerie(setSeriesHistoricas, "utilidad")}
             />
           </div>
         </div>
@@ -1208,10 +1175,7 @@ export default function Dashboard() {
                   paddingAngle={3}
                 >
                   {datosPastel.map((elemento) => (
-                    <Cell
-                      key={elemento.nombre}
-                      fill={elemento.color}
-                    />
+                    <Cell key={elemento.nombre} fill={elemento.color} />
                   ))}
                 </Pie>
 
@@ -1314,10 +1278,7 @@ export default function Dashboard() {
         ) : datosCategorias.length === 0 ? (
           <div className="flex min-h-72 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50">
             <div className="text-center">
-              <ReceiptText
-                size={38}
-                className="mx-auto mb-3 text-slate-300"
-              />
+              <ReceiptText size={38} className="mx-auto mb-3 text-slate-300" />
 
               <p className="font-black text-slate-500">
                 No hay gastos en este periodo
